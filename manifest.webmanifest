@@ -1,0 +1,17 @@
+{
+  "name": "Constellation — music relationship graph",
+  "short_name": "Constellation",
+  "description": "Give it a song, an album or a band, and it draws the web of artists, records, studios and labels around it.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0B0D12",
+  "theme_color": "#0B0D12",
+  "categories": ["music", "education", "entertainment"],
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

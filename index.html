@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0B0D12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Constellation">
+<meta name="description" content="Explore how music connects — artists, bands, albums, songs, studios and labels as a living web.">
+<title>Constellation</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<link rel="stylesheet" href="./css/app.css">
+</head>
+<body>
+
+<canvas id="graph" aria-label="Music relationship graph"></canvas>
+
+<!-- ── Top bar ───────────────────────────────────────────────────────── -->
+<header class="topbar" id="topbar">
+  <button class="icon-btn" id="btn-home" title="New search" aria-label="New search">
+    <svg viewBox="0 0 24 24"><path d="M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14zm9 16-4.5-4.5"/></svg>
+  </button>
+  <div class="seed-chip" id="seed-chip" hidden></div>
+  <div class="spacer"></div>
+  <button class="icon-btn" id="btn-recenter" title="Re-centre" aria-label="Re-centre graph">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>
+  </button>
+  <button class="icon-btn" id="btn-settings" title="Settings" aria-label="Settings">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.6v2.2M12 19.2v2.2M21.4 12h-2.2M5 12H2.6M18.6 5.4l-1.6 1.6M7 17l-1.6 1.6M18.6 18.6 17 17M7 7 5.4 5.4"/></svg>
+  </button>
+</header>
+
+<!-- ── Status / activity strip ───────────────────────────────────────── -->
+<div class="status" id="status" hidden><span class="pulse"></span><span id="status-text"></span></div>
+
+<!-- ── Legend ────────────────────────────────────────────────────────── -->
+<div class="legend" id="legend" hidden></div>
+
+<!-- ── Launch screen ─────────────────────────────────────────────────── -->
+<section class="launch" id="launch">
+  <div class="launch-inner">
+    <h1>Constellation</h1>
+    <p class="tagline">Give it a song, an album, a band, anyone.<br>It draws you the web they sit in.</p>
+
+    <form class="search" id="search-form" autocomplete="off">
+      <input type="search" id="search-input" placeholder="Miles Davis · Kind of Blue · Blue Monday…"
+             enterkeyhint="search" autocapitalize="words" autocorrect="off" spellcheck="false">
+      <button type="submit" id="search-go" aria-label="Search">
+        <svg viewBox="0 0 24 24"><path d="M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14zm9 16-4.5-4.5"/></svg>
+      </button>
+    </form>
+
+    <div class="results" id="results" hidden></div>
+
+    <div class="suggestions" id="suggestions">
+      <span class="suggestions-label">Try</span>
+      <button class="chip" data-q="Fela Kuti">Fela Kuti</button>
+      <button class="chip" data-q="Kind of Blue">Kind of Blue</button>
+      <button class="chip" data-q="Robert Johnson">Robert Johnson</button>
+      <button class="chip" data-q="Talking Heads">Talking Heads</button>
+      <button class="chip" data-q="Björk">Björk</button>
+    </div>
+
+    <p class="launch-foot">
+      <button class="linky" id="launch-settings">Connect data sources</button>
+      <span class="dot">·</span>
+      <button class="linky" id="launch-diag">Run diagnostics</button>
+    </p>
+  </div>
+</section>
+
+<!-- ── Detail sheet ──────────────────────────────────────────────────── -->
+<aside class="sheet" id="sheet" hidden>
+  <div class="sheet-grab" id="sheet-grab"></div>
+  <div class="sheet-scroll" id="sheet-body"></div>
+</aside>
+
+<!-- ── Settings / diagnostics modal ──────────────────────────────────── -->
+<div class="modal" id="modal" hidden>
+  <div class="modal-card">
+    <header class="modal-head">
+      <h2 id="modal-title">Settings</h2>
+      <button class="icon-btn" id="modal-close" aria-label="Close">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </header>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>
