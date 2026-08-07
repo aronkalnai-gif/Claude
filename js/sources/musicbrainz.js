@@ -185,19 +185,33 @@ export function tracksOf(release) {
   return out;
 }
 
-/** Release-groups worth showing for an artist: real albums, oldest first. */
-export function notableReleaseGroups(artist, n = 6) {
-  const rgs = artist['release-groups'] || [];
+const byDate = (a, b) =>
+  String(a['first-release-date'] || '9999').localeCompare(String(b['first-release-date'] || '9999'));
+
+/** Records worth showing for an artist: proper albums and EPs, oldest first. */
+export function notableAlbums(artist, n = 4) {
   const rank = rg => {
-    const type = rg['primary-type'] || '';
-    const secondary = rg['secondary-types'] || [];
-    if (secondary.length) return 3;             // compilations, live, remixes
-    if (type === 'Album') return 0;
-    if (type === 'EP') return 1;
-    return 2;                                    // singles, other
+    if ((rg['secondary-types'] || []).length) return 3;   // compilations, live, remixes
+    if (rg['primary-type'] === 'Album') return 0;
+    if (rg['primary-type'] === 'EP') return 1;
+    return 2;
   };
-  return rgs.slice()
-    .sort((a, b) => rank(a) - rank(b) ||
-      String(a['first-release-date'] || '9999').localeCompare(String(b['first-release-date'] || '9999')))
+  return (artist['release-groups'] || [])
+    .filter(rg => /^(Album|EP)$/.test(rg['primary-type'] || ''))
+    .slice()
+    .sort((a, b) => rank(a) - rank(b) || byDate(a, b))
+    .slice(0, n);
+}
+
+/**
+ * Singles. A single's title is the song's title, so these are the artist's
+ * songs by any listener's definition — and unlike a tracklist they cost no
+ * extra request, because the artist lookup already carries them.
+ */
+export function notableSingles(artist, n = 4) {
+  return (artist['release-groups'] || [])
+    .filter(rg => rg['primary-type'] === 'Single' && !(rg['secondary-types'] || []).length)
+    .slice()
+    .sort(byDate)
     .slice(0, n);
 }

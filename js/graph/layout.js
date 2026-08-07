@@ -95,22 +95,41 @@ export function createLayout() {
           node.hwFor = node.label;
         }
       }
-      // Two passes: separating one pair often pushes it into another, and a
-      // second sweep resolves most of that in the same frame.
+      /* Two separate constraints, because they fail differently.
+
+         The box keeps captions from stacking, but a box constraint can be
+         perfectly satisfied while the circles still intersect — offset the
+         pair diagonally and neither axis overlaps even though the discs do.
+         So circles get their own hard radial rule, applied first. Three
+         sweeps, because pulling one pair apart routinely pushes it into a
+         third, and a pile of three is exactly what goes wrong. */
       let collided = false;
-      for (let pass = 0; pass < 2; pass++) {
+      for (let pass = 0; pass < 3; pass++) {
+        let touched = false;
         for (let i = 0; i < n; i++) {
           const a = nodes[i];
           for (let j = i + 1; j < n; j++) {
             const b = nodes[j];
-            const dx = b.x - a.x, dy = b.y - a.y;
-            const wantX = a.hw + b.hw + 10;
-            const wantY = a.r + b.r + LABEL_BAND_H;
-            const overlapX = wantX - Math.abs(dx);
-            const overlapY = wantY - Math.abs(dy);
+            let dx = b.x - a.x, dy = b.y - a.y;
+
+            // 1. Discs may never intersect, at any angle.
+            const minD = a.r + b.r + 8;
+            const d = Math.hypot(dx, dy);
+            if (d < minD) {
+              touched = true;
+              const ux = d > 0.01 ? dx / d : 1, uy = d > 0.01 ? dy / d : 0;
+              const push = (minD - d) / 2;
+              a.x -= ux * push; a.y -= uy * push;
+              b.x += ux * push; b.y += uy * push;
+              dx = b.x - a.x; dy = b.y - a.y;
+            }
+
+            // 2. Captions want a box's worth of room around each node.
+            const overlapX = (a.hw + b.hw + 10) - Math.abs(dx);
+            const overlapY = (a.r + b.r + LABEL_BAND_H) - Math.abs(dy);
             if (overlapX <= 0 || overlapY <= 0) continue;
 
-            collided = true;
+            touched = true;
             if (overlapX < overlapY) {
               const push = (overlapX / 2) * Math.sign(dx || 1);
               a.x -= push; b.x += push;
@@ -120,7 +139,8 @@ export function createLayout() {
             }
           }
         }
-        if (!collided) break;
+        if (touched) collided = true;
+        else break;
       }
 
       // Gravity, integration, and the pins.

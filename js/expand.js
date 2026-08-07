@@ -10,7 +10,7 @@ import * as discogs from './sources/discogs.js';
 import { summaryFor } from './sources/wikipedia.js';
 import { releaseGroupArt, releaseArt, loadImage } from './sources/coverart.js';
 import { annotate } from './sources/llm.js';
-import { addNode, addEdge, graph, nodeId, emit } from './state.js';
+import { addNode, addEdge, graph, nodeId, emit, findByLabel } from './state.js';
 import { describeRelation, artistKind } from './model.js';
 import { hasLastfm, hasDiscogs, hasLlm, settings } from './config.js';
 
@@ -39,7 +39,10 @@ const REL_EDGE_KIND = {
   'engineered at': 'recordedAt',
 };
 
-const PER_EXPANSION_BUDGET = 16;
+// Raised from 16 when songs joined albums and people in the same pass:
+// an artist needs room for bandmates, records *and* songs before the
+// similarity edges start competing for slots.
+const PER_EXPANSION_BUDGET = 20;
 
 /* ── Entry points ───────────────────────────────────────────────────── */
 
@@ -165,7 +168,7 @@ async function expandArtist(ctx) {
   }
 
   // 2. Their records.
-  for (const rg of mb.notableReleaseGroups(data, 6)) {
+  for (const rg of mb.notableAlbums(data, 4)) {
     if (ctx.budget <= 0) break;
     const album = addNode({
       id: nodeId('album', rg.id),
@@ -184,7 +187,12 @@ async function expandArtist(ctx) {
       album, yr ? `released ${rg.title} in ${yr}` : `released ${rg.title}`);
   }
 
-  // 3. The fuzzy layer, if it's switched on.
+  // 3. Their songs. An artist without individual songs on the web is a
+  //    discography, not a map of what they made — so this runs from two
+  //    independent angles and takes whichever it can get.
+  await addSongsForArtist(ctx, data);
+
+  // 4. The fuzzy layer, if it's switched on.
   if (hasLastfm() && ctx.budget > 0) {
     onProgress('finding kindred spirits…');
     try {
@@ -208,6 +216,65 @@ async function expandArtist(ctx) {
           target, `shares an audience with ${s.name}`);
       }
     } catch (err) { console.warn('[lastfm]', err); }
+  }
+}
+
+/**
+ * Songs for an artist, from two sources that complement each other.
+ *
+ * Last.fm knows which songs people actually play, which is what someone
+ * means when they ask what an artist is known for — but it needs a key.
+ * MusicBrainz singles are always available and cost nothing extra, since
+ * the artist lookup already carried them; they skew towards what got
+ * pressed as a 7", which for older artists is exactly right.
+ */
+async function addSongsForArtist(ctx, data) {
+  const { node, onProgress } = ctx;
+  const seen = new Set();
+
+  if (hasLastfm() && ctx.budget > 0) {
+    onProgress('picking out the songs…');
+    try {
+      for (const t of await lastfm.topTracks(node.label, node.mbid, 5)) {
+        if (ctx.budget <= 0) break;
+        // Without an MBID the node would be a dead end on the graph.
+        if (!t.mbid) continue;
+        const track = addNode({
+          id: nodeId('track', t.mbid),
+          kind: 'track', mbType: 'recording', mbid: t.mbid,
+          label: t.name,
+          sublabel: 'most played',
+          searchTerm: `${node.label} ${t.name}`,
+          depth: node.depth + 1,
+        }, { near: node });
+        if (!track) continue;
+        seen.add(t.name.toLowerCase());
+        record(ctx, addEdge(node.id, track.id, 'performed', 'best known for'),
+          track, `is best known for "${t.name}"`);
+      }
+    } catch (err) { console.warn('[lastfm toptracks]', err); }
+  }
+
+  // Singles, as songs. A single's title is the song's title, and expanding
+  // one leads down to the recording itself, the session and the label.
+  for (const rg of mb.notableSingles(data, seen.size ? 2 : 4)) {
+    if (ctx.budget <= 0) break;
+    if (seen.has(rg.title.toLowerCase())) continue;
+    const yr = mb.year(rg['first-release-date']);
+    const song = findByLabel('track', rg.title) || addNode({
+      id: nodeId('track', rg.id),
+      kind: 'track', mbType: 'release-group', mbid: rg.id,
+      label: rg.title,
+      sublabel: yr ? `single · ${yr}` : 'single',
+      art: releaseGroupArt(rg.id),
+      searchTerm: `${node.label} ${rg.title}`,
+      depth: node.depth + 1,
+    }, { near: node });
+    if (!song) continue;
+    seen.add(rg.title.toLowerCase());
+    loadImage(song.art).then(img => { if (!img) song.art = null; emit(); });
+    record(ctx, addEdge(node.id, song.id, 'performed', yr ? `released as a single · ${yr}` : 'released as a single'),
+      song, yr ? `put out "${rg.title}" as a single in ${yr}` : `put out "${rg.title}" as a single`);
   }
 }
 
@@ -306,10 +373,11 @@ async function expandAlbum(ctx) {
     const tracks = mb.tracksOf(release).slice(0, 6);
     for (const t of tracks) {
       if (ctx.budget <= 0) break;
-      const track = addNode({
+      const title = t.trackTitle || t.title;
+      const track = findByLabel('track', title) || addNode({
         id: nodeId('track', t.id),
         kind: 'track', mbType: 'recording', mbid: t.id,
-        label: t.trackTitle || t.title,
+        label: title,
         sublabel: node.label,
         searchTerm: `${mb.credit(source?.['artist-credit'])} ${t.title}`,
         depth: node.depth + 1,

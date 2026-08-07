@@ -1,13 +1,13 @@
 {
-  "name": "Constellation — music relationship graph",
-  "short_name": "Constellation",
-  "description": "Give it a song, an album or a band, and it draws the web of artists, records, studios and labels around it.",
+  "name": "Odyssey — a music relationship graph",
+  "short_name": "Odyssey",
+  "description": "Name a song, record, band or person and follow the web of artists, songs, studios and labels around it.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#0B0D12",
-  "theme_color": "#0B0D12",
+  "background_color": "#F7F1E3",
+  "theme_color": "#F7F1E3",
   "categories": ["music", "education", "entertainment"],
   "icons": [
     { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },

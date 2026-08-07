@@ -17,11 +17,11 @@ const EDGES = [
   [256, 250, 370, 356], [150, 158, 372, 170], [146, 352, 370, 356],
 ];
 const NODES = [
-  [256, 250, 40, [0xF0, 0xB4, 0x29]],
-  [150, 158, 24, [0xF2, 0x70, 0x4A]],
-  [372, 170, 22, [0x5B, 0xA9, 0xF5]],
-  [146, 352, 20, [0x4E, 0xD6, 0xA0]],
-  [370, 356, 26, [0xB9, 0x8C, 0xF0]],
+  [256, 250, 40, [0xC4, 0x60, 0x3F]],   // rust — the seed
+  [150, 158, 24, [0xB4, 0x83, 0x2C]],   // ochre
+  [372, 170, 22, [0x3E, 0x6B, 0x80]],   // slate blue
+  [146, 352, 20, [0x4A, 0x7A, 0x4E]],   // forest
+  [370, 356, 26, [0x7A, 0x4C, 0x6B]],   // plum
 ];
 
 function render(size, { rounded = true } = {}) {
@@ -48,19 +48,19 @@ function render(size, { rounded = true } = {}) {
       if (rounded) mask = roundedRectCoverage(x + 0.5, y + 0.5, size, radius);
       if (mask <= 0) continue;
 
-      // Radial background, dark navy fading to near-black.
+      // Warm paper, very slightly deeper towards the edges.
       const t = Math.min(1, Math.hypot(x - cx, y - cy) / maxR);
       const col = [
-        lerp(0x1B, 0x0B, t), lerp(0x23, 0x0D, t), lerp(0x33, 0x12, t),
+        lerp(0xFB, 0xEE, t), lerp(0xF7, 0xE4, t), lerp(0xEC, 0xCF, t),
       ];
       put(x, y, col, mask);
     }
   }
 
   // Edges.
-  const lineW = 7 * s;
+  const lineW = 6 * s;
   for (const [x1, y1, x2, y2] of EDGES) {
-    strokeSegment(px, size, x1 * s, y1 * s, x2 * s, y2 * s, lineW, [0x3B, 0x46, 0x58], put, rounded, radius);
+    strokeSegment(px, size, x1 * s, y1 * s, x2 * s, y2 * s, lineW, [0xC0, 0xB0, 0x92], put, rounded, radius);
   }
 
   // Nodes.

@@ -42,7 +42,24 @@ const panel = createPanel(sheet, $('sheet-body'), {
 
 const modal = createModal($('modal'), $('modal-title'), $('modal-body'), $('modal-close'));
 
+/* Any new node has to wake the simulation up.
+
+   The force layout cools to a stop once a web has settled, which is what
+   you want — but nodes arrive at all sorts of times: a second expansion
+   minutes later, Last.fm results landing after the first settle, cover art
+   resolving. Without this, anything added to a cooled graph stays frozen
+   exactly where it was seeded, overlapping whatever it happened to land on.
+   Reheating here, rather than at each call site, means it can't be
+   forgotten by a new one. */
+let lastNodeCount = 0;
 onChange(() => {
+  const count = graph.nodes.size;
+  if (count > lastNodeCount) {
+    lastNodeCount = count;
+    renderer.reheat(0.8);
+  } else if (count < lastNodeCount) {
+    lastNodeCount = count;          // a reset
+  }
   renderer.kick();
   if (panel.current) panel.render();
 });
@@ -122,7 +139,7 @@ function drawResults() {
   resultsEl.innerHTML = candidates.map(c => {
     const color = KIND[c.kind]?.color || '#8FA3B8';
     return `<button class="result" data-id="${esc(c.kind)}:${esc(c.mbid)}">
-      <span class="kind" style="background:${hexA(color, .16)};color:${color}">${esc(kindLabel(c.kind))}</span>
+      <span class="kind" style="color:${color}">${esc(kindLabel(c.kind))}</span>
       <span class="who"><b>${esc(c.label)}</b>${c.sublabel ? `<small>${esc(c.sublabel)}</small>` : ''}</span>
     </button>`;
   }).join('');

@@ -1,17 +1,31 @@
 /* Shared vocabulary: node kinds, their colours, and how a relationship
    turns into a sentence a human wants to read. */
 
+/* The single source of truth for the palette, shared by the CSS and the
+   canvas. Pigments from a naturalist's plate rather than a screen: they
+   have to sit on warm paper without shouting, and stay distinguishable
+   from each other at the size of a fingernail. */
+export const THEME = {
+  paper:      '#F7F1E3',
+  paperDeep:  '#F1E7D3',
+  ink:        '#1F1D18',
+  inkSoft:    '#3B4A3D',
+  inkDim:     '#77705F',
+  rule:       '#D9CBAE',
+  rust:       '#C4603F',
+};
+
 export const KIND = {
-  person: { label: 'Person',  color: '#F0B429', r: 26 },
-  group:  { label: 'Band',    color: '#F2704A', r: 30 },
+  person: { label: 'Person',  color: '#B4832C', r: 26 },
+  group:  { label: 'Band',    color: '#C4603F', r: 30 },
   // Used for artists we've heard of but not yet looked up — Last.fm tells
   // us the name before MusicBrainz tells us whether it's a person or a band.
-  artist: { label: 'Artist',  color: '#C99C3E', r: 24 },
-  album:  { label: 'Album',   color: '#5BA9F5', r: 24 },
-  track:  { label: 'Song',    color: '#4ED6A0', r: 20 },
-  work:   { label: 'Work',    color: '#B98CF0', r: 20 },
-  label:  { label: 'Label',   color: '#8FA3B8', r: 20 },
-  place:  { label: 'Studio',  color: '#E2668E', r: 20 },
+  artist: { label: 'Artist',  color: '#A07A3C', r: 24 },
+  album:  { label: 'Album',   color: '#3E6B80', r: 24 },
+  track:  { label: 'Song',    color: '#4A7A4E', r: 21 },
+  work:   { label: 'Work',    color: '#7A4C6B', r: 20 },
+  label:  { label: 'Label',   color: '#6B7566', r: 20 },
+  place:  { label: 'Studio',  color: '#A34E58', r: 20 },
 };
 
 export const kindColor = k => (KIND[k] || KIND.work).color;
@@ -22,20 +36,20 @@ export const kindRadius = k => (KIND[k] || KIND.work).r;
    `weight` drives spring strength: the tighter the tie, the closer the
    two nodes sit. */
 export const EDGE = {
-  member:      { weight: 1.00, color: '#F0B429', dash: null },
-  founded:     { weight: 1.00, color: '#F0B429', dash: null },
-  credit:      { weight: 0.95, color: '#7E8AA0', dash: null },
-  released:    { weight: 0.85, color: '#5BA9F5', dash: null },
-  track:       { weight: 0.80, color: '#4ED6A0', dash: null },
-  performed:   { weight: 0.75, color: '#9AA5B6', dash: null },
-  produced:    { weight: 0.70, color: '#B98CF0', dash: null },
-  recordedAt:  { weight: 0.65, color: '#E2668E', dash: [5, 4] },
-  onLabel:     { weight: 0.55, color: '#8FA3B8', dash: [5, 4] },
-  wroteWork:   { weight: 0.60, color: '#B98CF0', dash: [5, 4] },
-  otherTake:   { weight: 0.55, color: '#B98CF0', dash: [2, 5] },
-  collab:      { weight: 0.70, color: '#F2704A', dash: null },
-  related:     { weight: 0.50, color: '#6E7A8C', dash: [2, 5] },
-  similar:     { weight: 0.35, color: '#4A5568', dash: [2, 5] },
+  member:      { weight: 1.00, color: '#B4832C', dash: null },
+  founded:     { weight: 1.00, color: '#B4832C', dash: null },
+  credit:      { weight: 0.95, color: '#8A7B5E', dash: null },
+  released:    { weight: 0.85, color: '#3E6B80', dash: null },
+  track:       { weight: 0.80, color: '#4A7A4E', dash: null },
+  performed:   { weight: 0.75, color: '#7E8A72', dash: null },
+  produced:    { weight: 0.70, color: '#7A4C6B', dash: null },
+  recordedAt:  { weight: 0.65, color: '#A34E58', dash: [5, 4] },
+  onLabel:     { weight: 0.55, color: '#6B7566', dash: [5, 4] },
+  wroteWork:   { weight: 0.60, color: '#7A4C6B', dash: [5, 4] },
+  otherTake:   { weight: 0.55, color: '#7A4C6B', dash: [2, 5] },
+  collab:      { weight: 0.70, color: '#C4603F', dash: null },
+  related:     { weight: 0.50, color: '#8A8370', dash: [2, 5] },
+  similar:     { weight: 0.35, color: '#A39A83', dash: [2, 5] },
 };
 
 export const edgeStyle = k => EDGE[k] || EDGE.related;

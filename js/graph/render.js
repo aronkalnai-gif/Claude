@@ -6,7 +6,7 @@
    can share one pointer pipeline without fighting each other. */
 
 import { graph, nodeList, edgeList, neighbours, emit } from '../state.js';
-import { kindColor, edgeStyle } from '../model.js';
+import { kindColor, edgeStyle, THEME } from '../model.js';
 import { createLayout } from './layout.js';
 import { peekImage, loadImage } from '../sources/coverart.js';
 
@@ -244,14 +244,18 @@ export function createRenderer(canvas, { onTapNode, onTapBackground, onDoubleTap
 
   function draw(now) {
     ctx.save();
-    ctx.fillStyle = '#0B0D12';
+    ctx.fillStyle = THEME.paper;
     ctx.fillRect(0, 0, width, height);
 
-    // A soft pool of light behind the graph so nodes read as lit objects
-    // rather than stickers on a flat field.
-    const g = ctx.createRadialGradient(width / 2, height * 0.42, 0, width / 2, height * 0.42, Math.max(width, height) * 0.75);
-    g.addColorStop(0, '#141A27');
-    g.addColorStop(1, '#0B0D12');
+    // A whisper of tooth, so the ground reads as paper rather than a flat
+    // fill. Generated once and tiled — free on every frame after the first.
+    ctx.fillStyle = grain();
+    ctx.fillRect(0, 0, width, height);
+
+    // The faintest warm vignette, as if the sheet were lit from above.
+    const g = ctx.createRadialGradient(width / 2, height * 0.4, 0, width / 2, height * 0.4, Math.max(width, height) * 0.8);
+    g.addColorStop(0, 'rgba(255, 253, 247, .5)');
+    g.addColorStop(1, 'rgba(226, 213, 189, .28)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, width, height);
 
@@ -280,7 +284,7 @@ export function createRenderer(canvas, { onTapNode, onTapBackground, onDoubleTap
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
       ctx.strokeStyle = style.color;
-      ctx.globalAlpha = dimmed ? 0.09 : (highlighted ? 0.85 : 0.28 + (style.weight * 0.22));
+      ctx.globalAlpha = dimmed ? 0.22 : (highlighted ? 0.9 : 0.34 + (style.weight * 0.26));
       ctx.lineWidth = (highlighted ? 2.4 : 1.2 + style.weight * 0.9) / Math.max(view.scale, 0.6);
       if (style.dash) ctx.setLineDash(style.dash.map(v => v / Math.max(view.scale, 0.6)));
       ctx.stroke();
@@ -297,7 +301,7 @@ export function createRenderer(canvas, { onTapNode, onTapBackground, onDoubleTap
       drawNode(ctx, n, r, {
         selected: n.id === sel,
         seed: n.id === graph.seedId,
-        alpha: dimmed ? 0.28 : 1,
+        alpha: dimmed ? 0.5 : 1,
         scale: view.scale,
       });
     }
@@ -325,6 +329,17 @@ export function createRenderer(canvas, { onTapNode, onTapBackground, onDoubleTap
       return true;
     };
 
+    const priority = nodes.slice().sort((x, y) =>
+      score(y, sel, near) - score(x, sel, near));
+
+    // The name of the thing you're looking at, and of the thing the whole
+    // web grew from, outrank every caption on screen — they get placed
+    // before the edge labels rather than competing with them for space.
+    for (const n of priority) {
+      if (n.id !== sel && n.id !== graph.seedId) continue;
+      drawLabel(ctx, n, 1, fits);
+    }
+
     if (sel) {
       for (const e of edges) {
         if (e.a !== sel && e.b !== sel) continue;
@@ -335,14 +350,13 @@ export function createRenderer(canvas, { onTapNode, onTapBackground, onDoubleTap
       }
     }
 
-    const priority = nodes.slice().sort((x, y) =>
-      score(y, sel, near) - score(x, sel, near));
     for (const n of priority) {
+      if (n.id === sel || n.id === graph.seedId) continue;   // already placed
       const dimmed = sel && !near.has(n.id);
       const important = n.id === sel || n.id === graph.seedId || near.has(n.id);
       if (!important && view.scale < 0.34) continue;
       if (dimmed && view.scale < 0.55) continue;
-      drawLabel(ctx, n, dimmed ? 0.4 : 1, fits);
+      drawLabel(ctx, n, dimmed ? 0.62 : 1, fits);
     }
   }
 
@@ -359,7 +373,7 @@ export function createRenderer(canvas, { onTapNode, onTapBackground, onDoubleTap
     const label = text.length > 44 ? text.slice(0, 42) + '…' : text;
 
     ctx.save();
-    ctx.font = '500 11px ui-rounded, -apple-system, system-ui, sans-serif';
+    ctx.font = 'italic 400 12px ui-serif, "New York", Georgia, serif';
     const w = ctx.measureText(label).width + 12;
     // Horizontal, never rotated: text angled along a line is charming on a
     // diagram and unreadable on a moving graph.
@@ -367,10 +381,13 @@ export function createRenderer(canvas, { onTapNode, onTapBackground, onDoubleTap
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(11,13,18,.9)';
-    roundRect(ctx, p.x - w / 2, p.y - 9, w, 18, 5);
+    ctx.fillStyle = 'rgba(247, 241, 227, .93)';
+    roundRect(ctx, p.x - w / 2, p.y - 9, w, 18, 3);
     ctx.fill();
-    ctx.fillStyle = '#B9C3D2';
+    ctx.strokeStyle = THEME.rule;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = THEME.inkDim;
     ctx.fillText(label, p.x, p.y + 0.5);
     ctx.restore();
   }
@@ -383,7 +400,7 @@ export function createRenderer(canvas, { onTapNode, onTapBackground, onDoubleTap
     if (selected || seed) {
       ctx.beginPath();
       ctx.arc(n.x, n.y, r + (selected ? 9 : 6), 0, Math.PI * 2);
-      ctx.fillStyle = hexA(color, selected ? 0.2 : 0.11);
+      ctx.fillStyle = hexA(color, selected ? 0.16 : 0.09);
       ctx.fill();
     }
 
@@ -406,26 +423,27 @@ export function createRenderer(canvas, { onTapNode, onTapBackground, onDoubleTap
       const side = r * 2;
       ctx.drawImage(img, n.x - r, n.y - r, side, side);
       ctx.restore();
-      ctx.globalAlpha = alpha * 0.35;
+      ctx.globalAlpha = alpha * 0.22;
       ctx.fillStyle = color;
       ctx.fill();
       ctx.globalAlpha = alpha;
     } else {
+      // A wash of pigment, lighter at the top as if laid with a brush.
       const grad = ctx.createLinearGradient(n.x, n.y - r, n.x, n.y + r);
-      grad.addColorStop(0, hexA(color, 0.34));
-      grad.addColorStop(1, hexA(color, 0.14));
+      grad.addColorStop(0, hexA(color, 0.15));
+      grad.addColorStop(1, hexA(color, 0.30));
       ctx.fillStyle = grad;
       ctx.fill();
     }
 
-    ctx.lineWidth = (selected ? 2.6 : seed ? 2.2 : 1.5) / Math.max(scale, 0.7);
-    ctx.strokeStyle = selected ? '#FFFFFF' : hexA(color, seed ? 0.95 : 0.7);
+    ctx.lineWidth = (selected ? 2.4 : seed ? 2 : 1.3) / Math.max(scale, 0.7);
+    ctx.strokeStyle = selected ? THEME.ink : hexA(color, seed ? 0.95 : 0.78);
     ctx.stroke();
 
     // A quiet initial when there's no art to show.
     if (!img && r > 13) {
-      ctx.fillStyle = hexA(color, 0.85);
-      ctx.font = `600 ${Math.round(r * 0.9)}px ui-rounded, -apple-system, system-ui, sans-serif`;
+      ctx.fillStyle = hexA(color, 0.92);
+      ctx.font = `400 ${Math.round(r * 1.05)}px ui-serif, "New York", Georgia, serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText((n.label || '?').trim()[0].toUpperCase(), n.x, n.y + r * 0.04);
@@ -435,7 +453,7 @@ export function createRenderer(canvas, { onTapNode, onTapBackground, onDoubleTap
       const t = performance.now() / 380;
       ctx.beginPath();
       ctx.arc(n.x, n.y, r + 7, t, t + Math.PI * 1.15);
-      ctx.strokeStyle = '#FFFFFF';
+      ctx.strokeStyle = THEME.rust;
       ctx.globalAlpha = alpha * 0.8;
       ctx.lineWidth = 2 / Math.max(scale, 0.7);
       ctx.stroke();
@@ -457,7 +475,7 @@ export function createRenderer(canvas, { onTapNode, onTapBackground, onDoubleTap
 
     const text = n.label.length > 26 ? n.label.slice(0, 24) + '…' : n.label;
     ctx.save();
-    ctx.font = '600 12.5px ui-rounded, -apple-system, system-ui, sans-serif';
+    ctx.font = '600 13.5px ui-serif, "New York", Georgia, serif';
     const w = Math.max(ctx.measureText(text).width, 20) + 8;
     const h = withSub ? 32 : 17;
     if (!fits({ x: anchor.x - w / 2, y: top - 2, w, h })) { ctx.restore(); return; }
@@ -469,18 +487,18 @@ export function createRenderer(canvas, { onTapNode, onTapBackground, onDoubleTap
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.lineWidth = 3.5;
-    ctx.strokeStyle = 'rgba(11,13,18,.94)';
+    ctx.strokeStyle = 'rgba(247, 241, 227, .95)';
     ctx.lineJoin = 'round';
     ctx.strokeText(text, anchor.x, top);
-    ctx.fillStyle = '#E9EDF4';
+    ctx.fillStyle = THEME.ink;
     ctx.fillText(text, anchor.x, top);
 
     if (withSub) {
       const sub = n.sublabel.length > 32 ? n.sublabel.slice(0, 30) + '…' : n.sublabel;
-      ctx.font = '400 11px ui-rounded, -apple-system, system-ui, sans-serif';
-      ctx.strokeText(sub, anchor.x, top + 15);
-      ctx.fillStyle = '#93A0B2';
-      ctx.fillText(sub, anchor.x, top + 15);
+      ctx.font = 'italic 400 12px ui-serif, "New York", Georgia, serif';
+      ctx.strokeText(sub, anchor.x, top + 16);
+      ctx.fillStyle = THEME.inkDim;
+      ctx.fillText(sub, anchor.x, top + 16);
     }
     ctx.restore();
   }
@@ -517,6 +535,26 @@ export function createRenderer(canvas, { onTapNode, onTapBackground, onDoubleTap
 /* ── Tiny helpers ───────────────────────────────────────────────────── */
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+/* A 96px tile of faint speckle, built once and reused as a fill pattern.
+   Paper that is perfectly flat reads as a screen; a little tooth is what
+   sells the plate. */
+let grainPattern = null;
+function grain() {
+  if (grainPattern) return grainPattern;
+  const tile = document.createElement('canvas');
+  tile.width = tile.height = 96;
+  const g = tile.getContext('2d');
+  const img = g.createImageData(96, 96);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = Math.random();
+    img.data[i] = 120; img.data[i + 1] = 96; img.data[i + 2] = 56;
+    img.data[i + 3] = v > 0.86 ? 10 : (v < 0.06 ? 6 : 0);
+  }
+  g.putImageData(img, 0, 0);
+  grainPattern = document.createElement('canvas').getContext('2d').createPattern(tile, 'repeat');
+  return grainPattern;
+}
 
 function hexA(hex, a) {
   const h = hex.replace('#', '');

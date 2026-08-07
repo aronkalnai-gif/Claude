@@ -50,6 +50,25 @@ export async function similarTracks(artist, track, mbid, limit = 8) {
   })).filter(t => t.name);
 }
 
+/**
+ * The songs an artist is actually known for, ranked by listening rather
+ * than by what happened to get pressed as a single. This is the best
+ * available answer to "which of their songs would I recognise".
+ */
+export async function topTracks(name, mbid, limit = 5) {
+  if (!hasLastfm()) return [];
+  const params = mbid ? { mbid, limit: String(limit) } : { artist: name, limit: String(limit) };
+  const data = unwrap(await getJSON(url('artist.gettoptracks', params)));
+  const raw = data?.toptracks?.track;
+  const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+  return list.map(t => ({
+    name: t.name,
+    mbid: t.mbid || null,
+    listeners: Number(t.listeners) || 0,
+    rank: Number(t['@attr']?.rank) || 0,
+  })).filter(t => t.name);
+}
+
 export async function artistInfo(name, mbid) {
   if (!hasLastfm()) return null;
   const params = mbid ? { mbid } : { artist: name };

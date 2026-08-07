@@ -6,7 +6,7 @@
    readable by any script running on this origin, so use keys you're
    willing to rotate, and don't host this app on a domain you share. */
 
-const KEY = 'constellation.settings.v1';
+const KEY = 'odyssey.settings.v1';
 
 const DEFAULTS = {
   lastfmKey: '',

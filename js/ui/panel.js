@@ -97,7 +97,7 @@ export function createPanel(el, body, { onExpand, onSelect, onClose }) {
 
     body.innerHTML = `
       ${art}
-      <span class="sheet-kind" style="background:${hexA(color, .16)};color:${color}">${esc(kindLabel(n.kind))}</span>
+      <span class="sheet-kind" style="color:${color}">${esc(kindLabel(n.kind))}</span>
       <h3>${esc(n.label)}</h3>
       ${n.sublabel ? `<p class="sub">${esc(n.sublabel)}</p>` : ''}
 

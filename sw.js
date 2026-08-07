@@ -7,7 +7,7 @@
    are deliberately not touched here — net.js runs its own cache with its
    own expiry rules. */
 
-const VERSION = 'constellation-v1';
+const VERSION = 'odyssey-v1';
 
 const SHELL = [
   './',

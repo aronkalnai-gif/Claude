@@ -45,6 +45,7 @@ const REL_ID    = '44444444-4444-4444-4444-444444444444';
 const REC_ID    = '55555555-5555-5555-5555-555555555555';
 const PLACE_ID  = '66666666-6666-6666-6666-666666666666';
 const LABEL_ID  = '77777777-7777-7777-7777-777777777777';
+const SINGLE_ID = '88888888-8888-8888-8888-888888888888';
 
 const fixtures = [
   [/ws\/2\/artist\?.*query=/, {
@@ -80,6 +81,7 @@ const fixtures = [
     ],
     'release-groups': [
       { id: RG_ID, title: 'Proof of Concept', 'primary-type': 'Album', 'first-release-date': '1967-12-05' },
+      { id: SINGLE_ID, title: 'Regression', 'primary-type': 'Single', 'first-release-date': '1967-08-01' },
     ],
   }],
   [new RegExp(`ws/2/artist/${ARTIST_ID}`), {
@@ -100,6 +102,9 @@ const fixtures = [
     'label-info': [{ 'catalog-number': 'TST 001', label: { id: LABEL_ID, name: 'Assert Records' } }],
     media: [{ tracks: [
       { position: 1, title: 'Assertion Blues', recording: { id: REC_ID, title: 'Assertion Blues' } },
+      // Same title as the single above, under a different MBID — exactly the
+      // shape that used to draw one song twice.
+      { position: 2, title: 'Regression', recording: { id: '99999999-9999-9999-9999-999999999999', title: 'Regression' } },
     ] }],
     relations: [
       { type: 'recorded at', direction: 'forward', 'target-type': 'place', begin: '1967-06-01',
@@ -196,6 +201,12 @@ try {
     /guitar/.test(s.edges.find(e => e.kind === 'member')?.label || ''),
     s.edges.find(e => e.kind === 'member')?.label);
   check('album discovered from the band', s.nodes.some(n => n.kind === 'album'));
+  check('individual songs surface alongside the albums',
+    s.nodes.some(n => n.kind === 'track'),
+    s.nodes.filter(n => n.kind === 'track').map(n => n.label).join(', '));
+  check('a song carries how it was released',
+    /single/.test(s.edges.find(e => e.kind === 'performed')?.label || ''),
+    s.edges.find(e => e.kind === 'performed')?.label);
   check('launch screen dismissed', await page.isHidden('#launch'));
   check('legend reflects what is on screen', await page.isVisible('#legend'));
 
@@ -220,6 +231,32 @@ try {
     /1967/.test(s.edges.find(e => e.kind === 'recordedAt')?.label || ''),
     s.edges.find(e => e.kind === 'recordedAt')?.label);
   check('producer credit captured', s.edges.some(e => e.kind === 'produced'));
+  check('one song is not drawn twice under two MBIDs',
+    s.nodes.filter(n => n.kind === 'track' && n.label === 'Regression').length === 1,
+    `${s.nodes.filter(n => n.kind === 'track').map(n => n.label).join(', ')}`);
+
+  // Let the layout finish, then check nothing is piled up. A second
+  // expansion lands on an already-cooled graph, which is exactly the case
+  // where new nodes used to freeze wherever they were seeded.
+  await page.waitForTimeout(9000);
+  const pileup = await page.evaluate(async () => {
+    const m = await import('./js/state.js');
+    const nodes = m.nodeList();
+    let overlaps = 0, worst = 0;
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        const d = Math.hypot(b.x - a.x, b.y - a.y);
+        const need = a.r + b.r;
+        if (d < need) { overlaps++; worst = Math.max(worst, need - d); }
+      }
+    }
+    return { overlaps, worst: Math.round(worst), n: nodes.length };
+  });
+  check('nothing is piled up after a second expansion',
+    pileup.overlaps === 0,
+    `${pileup.overlaps} overlapping pairs across ${pileup.n} nodes` +
+    (pileup.worst ? `, worst ${pileup.worst}px` : ''));
 
   // Detail sheet.
   await page.evaluate(async id => {

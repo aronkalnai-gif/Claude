@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#0B0D12">
+<meta name="theme-color" content="#F7F1E3">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Constellation">
-<meta name="description" content="Explore how music connects — artists, bands, albums, songs, studios and labels as a living web.">
-<title>Constellation</title>
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Odyssey">
+<meta name="description" content="Odyssey — name a song, record, band or person and follow the web of artists, songs, studios and labels around it.">
+<title>Odyssey</title>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
@@ -42,8 +42,19 @@
 <!-- ── Launch screen ─────────────────────────────────────────────────── -->
 <section class="launch" id="launch">
   <div class="launch-inner">
-    <h1>Constellation</h1>
-    <p class="tagline">Give it a song, an album, a band, anyone.<br>It draws you the web they sit in.</p>
+    <svg class="launch-mark" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="3.1" fill="currentColor"/>
+      <circle cx="12" cy="3.2" r="1.5" fill="currentColor"/>
+      <circle cx="20.8" cy="12" r="1.5" fill="currentColor"/>
+      <circle cx="12" cy="20.8" r="1.5" fill="currentColor"/>
+      <circle cx="3.2" cy="12" r="1.5" fill="currentColor"/>
+      <g stroke="currentColor" stroke-width="0.9" opacity=".55">
+        <path d="M12 4.7v4.2M12 15.1v4.2M4.7 12h4.2M15.1 12h4.2"/>
+      </g>
+    </svg>
+    <h1>Odyssey</h1>
+    <p class="tagline">Name a song, a record, a band, anyone.<br>It draws the web they sit in — and tells you <em>why</em>.</p>
+    <div class="fleuron"><i></i></div>
 
     <form class="search" id="search-form" autocomplete="off">
       <input type="search" id="search-input" placeholder="Miles Davis · Kind of Blue · Blue Monday…"
@@ -56,12 +67,12 @@
     <div class="results" id="results" hidden></div>
 
     <div class="suggestions" id="suggestions">
-      <span class="suggestions-label">Try</span>
+      <span class="suggestions-label">Begin with</span>
       <button class="chip" data-q="Fela Kuti">Fela Kuti</button>
       <button class="chip" data-q="Kind of Blue">Kind of Blue</button>
       <button class="chip" data-q="Robert Johnson">Robert Johnson</button>
+      <button class="chip" data-q="Hallelujah Leonard Cohen">Hallelujah</button>
       <button class="chip" data-q="Talking Heads">Talking Heads</button>
-      <button class="chip" data-q="Björk">Björk</button>
     </div>
 
     <p class="launch-foot">

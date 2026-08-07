@@ -99,6 +99,24 @@ export function addEdge(aId, bId, kind, label, { lore = null, weight = null } = 
   return edge;
 }
 
+/**
+ * Find an existing node of a kind by its title.
+ *
+ * The same song legitimately exists in MusicBrainz under several ids — the
+ * single that carried it and the recording on the album are different
+ * entities with different MBIDs. To a listener they are one song, and
+ * seeing the title twice on the web is just confusing, so callers use this
+ * to attach to whichever node got there first.
+ */
+export function findByLabel(kind, label) {
+  const want = String(label || '').trim().toLowerCase();
+  if (!want) return null;
+  for (const n of graph.nodes.values()) {
+    if (n.kind === kind && n.label.trim().toLowerCase() === want) return n;
+  }
+  return null;
+}
+
 /** Every edge touching a node, with the node on the other end resolved. */
 export function neighbours(id) {
   const out = [];
