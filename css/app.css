@@ -231,7 +231,8 @@ button { font: inherit; color: inherit; }
 }
 .tagline em { color: var(--rust); font-style: italic; }
 
-.launch .fleuron { margin: 0 0 22px; }
+.launch .fleuron { margin: 0 0 16px; }
+.launch-rubric { margin: 0 0 22px; }
 
 .search { display: flex; gap: 9px; }
 .search input {

@@ -192,31 +192,67 @@ async function expandArtist(ctx) {
   //    independent angles and takes whichever it can get.
   await addSongsForArtist(ctx, data);
 
-  // 4. The fuzzy layer, if it's switched on.
-  if (hasLastfm() && ctx.budget > 0) {
-    onProgress('finding kindred spirits…');
+  // 4. Stylistic kin.
+  await addStylisticKin(ctx, data);
+}
+
+/**
+ * Artists working in the same style.
+ *
+ * Deliberately *not* "people who listen to this also listen to that" —
+ * co-listening tells you about audiences, and an audience overlap is often
+ * an accident of era or playlist rather than anything you can hear. This
+ * asks a narrower and more answerable question: who else made music like
+ * this? MusicBrainz's tag index answers it, which also means stylistic
+ * connections need no API key.
+ *
+ * The tag has to be specific to be worth drawing. "Rock" would tie the
+ * seed to a few thousand strangers; "hard bop" is a claim about the music.
+ */
+async function addStylisticKin(ctx, data) {
+  const { node, onProgress } = ctx;
+  if (ctx.budget <= 0) return;
+
+  let styles = mb.styleTags(data, 2);
+
+  // MusicBrainz tagging is uneven — plenty of artists have none. Last.fm's
+  // tags are noisier but broad coverage, and the same filter cleans them up.
+  if (!styles.length && hasLastfm()) {
     try {
-      const similar = await lastfm.similarArtists(node.label, node.mbid, 6);
-      for (const s of similar) {
-        if (ctx.budget <= 0) break;
-        // Without an MBID we can't look them up later, so they'd be a dead
-        // end on the graph — skip rather than tease.
-        if (!s.mbid) continue;
-        const target = addNode({
-          id: nodeId('artist', s.mbid),
-          kind: 'artist', mbType: 'artist', mbid: s.mbid,
-          label: s.name,
-          sublabel: 'similar listening',
-          provisional: true,
-          depth: node.depth + 1,
-        }, { near: node });
-        if (!target) continue;
-        const pct = Math.round(s.match * 100);
-        record(ctx, addEdge(node.id, target.id, 'similar', `similar listening · ${pct}% match`),
-          target, `shares an audience with ${s.name}`);
-      }
-    } catch (err) { console.warn('[lastfm]', err); }
+      const info = await lastfm.artistInfo(node.label, node.mbid);
+      styles = mb.styleTags({ tags: (info?.tags || []).map(name => ({ name, count: 1 })) }, 2);
+    } catch (err) { console.warn('[lastfm tags]', err); }
   }
+
+  if (!styles.length) return;
+  node.styles = styles;
+
+  const style = styles[0];
+  onProgress(`looking for other ${style}…`);
+
+  try {
+    const kin = await mb.artistsByTag(style, 8);
+    let added = 0;
+    for (const a of kin) {
+      if (ctx.budget <= 0 || added >= 4) break;
+      if (a.id === node.mbid) continue;                   // the seed matches its own tag
+      if (graph.nodes.has(nodeId('person', a.id)) ||
+          graph.nodes.has(nodeId('group', a.id))) continue;  // already here for a better reason
+
+      const kind = artistKind(a);
+      const target = addNode({
+        id: nodeId(kind, a.id),
+        kind, mbType: 'artist', mbid: a.id,
+        label: a.name,
+        sublabel: [a.disambiguation, style].filter(Boolean).join(' · '),
+        depth: node.depth + 1,
+      }, { near: node });
+      if (!target) continue;
+      added++;
+      record(ctx, addEdge(node.id, target.id, 'style', `both ${style}`),
+        target, `works in the same style — ${style}`);
+    }
+  } catch (err) { console.warn('[style kin]', err); }
 }
 
 /**
@@ -484,26 +520,55 @@ async function expandRecording(ctx) {
     record(ctx, addEdge(node.id, album.id, 'track', 'appears on'), album, `appears on ${r.title}`);
   }
 
-  if (hasLastfm() && ctx.budget > 0) {
-    try {
-      const artistName = mb.credit(rec['artist-credit']);
-      const similar = await lastfm.similarTracks(artistName, rec.title, node.mbid, 5);
-      for (const s of similar) {
-        if (ctx.budget <= 0) break;
-        if (!s.mbid) continue;
-        const track = addNode({
-          id: nodeId('track', s.mbid),
-          kind: 'track', mbType: 'recording', mbid: s.mbid,
-          label: s.name, sublabel: s.artist || 'similar listening',
-          searchTerm: `${s.artist} ${s.name}`,
-          depth: node.depth + 1,
-        }, { near: node });
-        if (!track) continue;
-        record(ctx, addEdge(node.id, track.id, 'similar', `often played alongside`),
-          track, `gets played alongside ${s.name}`);
-      }
-    } catch (err) { console.warn('[lastfm]', err); }
+  // Songs in the same style. A recording's own tags are often thin, so fall
+  // back to the style of whoever made it — which is usually what someone
+  // means by "something else that sounds like this" anyway.
+  await addStylisticSongs(ctx, rec);
+}
+
+async function addStylisticSongs(ctx, rec) {
+  const { node, onProgress } = ctx;
+  if (ctx.budget <= 0) return;
+
+  let styles = mb.styleTags(rec, 2);
+
+  // Individual recordings are tagged far less often than the people who
+  // made them, so fall back to the artist's style. If you arrived here from
+  // that artist the lookup is already cached, so this usually costs nothing.
+  if (!styles.length) {
+    const credited = mb.creditArtists(rec['artist-credit'])[0];
+    if (credited?.id) {
+      const artist = await mb.lookupArtist(credited.id).catch(() => null);
+      if (artist) styles = mb.styleTags(artist, 2);
+    }
   }
+
+  const style = styles[0];
+  if (!style) return;
+  node.styles = styles;
+
+  onProgress(`looking for other ${style}…`);
+  try {
+    const kin = await mb.recordingsByTag(style, 8);
+    let added = 0;
+    for (const r of kin) {
+      if (ctx.budget <= 0 || added >= 3) break;
+      if (r.id === node.mbid) continue;
+      if (findByLabel('track', r.title)) continue;
+      const track = addNode({
+        id: nodeId('track', r.id),
+        kind: 'track', mbType: 'recording', mbid: r.id,
+        label: r.title,
+        sublabel: [r.artist, style].filter(Boolean).join(' · '),
+        searchTerm: `${r.artist} ${r.title}`,
+        depth: node.depth + 1,
+      }, { near: node });
+      if (!track) continue;
+      added++;
+      record(ctx, addEdge(node.id, track.id, 'style', `both ${style}`),
+        track, `is another ${style} recording`);
+    }
+  } catch (err) { console.warn('[style songs]', err); }
 }
 
 /* ── Works, labels, studios ─────────────────────────────────────────── */

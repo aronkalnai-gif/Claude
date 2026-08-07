@@ -48,6 +48,15 @@ const LABEL_ID  = '77777777-7777-7777-7777-777777777777';
 const SINGLE_ID = '88888888-8888-8888-8888-888888888888';
 
 const fixtures = [
+  // Stylistic kinship: a tag query, answered with two artists in that style
+  // plus the seed itself (which must be filtered out).
+  [/ws\/2\/artist\?.*tag/, {
+    artists: [
+      { id: BAND_ID, name: 'The Testers', type: 'Group', score: 100 },
+      { id: 'aaaaaaaa-0000-0000-0000-000000000001', name: 'Mock Turtle Soup', type: 'Group', score: 92 },
+      { id: 'aaaaaaaa-0000-0000-0000-000000000002', name: 'The Stub Sessions', type: 'Group', score: 88 },
+    ],
+  }],
   [/ws\/2\/artist\?.*query=/, {
     artists: [{
       id: BAND_ID, name: 'The Testers', type: 'Group', score: 100,
@@ -168,7 +177,7 @@ const state = () => page.evaluate(async () => {
   const m = await import('./js/state.js');
   return {
     nodes: m.nodeList().map(n => ({ id: n.id, kind: n.kind, label: n.label, expanded: n.expanded })),
-    edges: m.edgeList().map(e => ({ kind: e.kind, label: e.label })),
+    edges: m.edgeList().map(e => ({ kind: e.kind, label: e.label, a: e.a, b: e.b })),
     selected: m.graph.selectedId,
   };
 });
@@ -204,6 +213,18 @@ try {
   check('individual songs surface alongside the albums',
     s.nodes.some(n => n.kind === 'track'),
     s.nodes.filter(n => n.kind === 'track').map(n => n.label).join(', '));
+  check('stylistic kin are found by style, not by audience',
+    s.edges.some(e => e.kind === 'style'),
+    s.edges.find(e => e.kind === 'style')?.label || 'no style edge');
+  check('the style edge names the shared style',
+    /psychedelic rock/.test(s.edges.find(e => e.kind === 'style')?.label || ''),
+    s.edges.find(e => e.kind === 'style')?.label);
+  check('the seed is not listed as its own stylistic kin',
+    s.edges.filter(e => e.kind === 'style').every(e => e.a !== e.b) &&
+    s.nodes.filter(n => n.label === 'The Testers').length === 1,
+    s.edges.filter(e => e.kind === 'style').map(e => `${e.a}→${e.b}`).join(' '));
+  check('no co-listening edges remain',
+    !s.edges.some(e => e.kind === 'similar'));
   check('a song carries how it was released',
     /single/.test(s.edges.find(e => e.kind === 'performed')?.label || ''),
     s.edges.find(e => e.kind === 'performed')?.label);

@@ -159,6 +159,69 @@ export const topTags = (entity, n = 4) =>
     .slice(0, n)
     .map(t => t.name);
 
+/* Tags that describe a shelf rather than a sound. "Rock" is true of tens of
+   thousands of artists and tells you nothing about why two of them belong
+   near each other; "hard bop" or "psychedelic folk" is a real stylistic
+   claim. The rest are the housekeeping labels people attach to their own
+   listening, which aren't about the music at all. */
+const BROAD_TAG = new Set([
+  'rock', 'pop', 'jazz', 'classical', 'folk', 'metal', 'electronic', 'electronica',
+  'hip hop', 'hip-hop', 'rap', 'country', 'blues', 'dance', 'soul', 'funk', 'punk',
+  'indie', 'alternative', 'alternative rock', 'experimental', 'world', 'ambient',
+  'reggae', 'r&b', 'rnb', 'soundtrack', 'instrumental', 'singer-songwriter',
+  'male vocalists', 'female vocalists', 'seen live', 'favorites', 'favourites',
+  'british', 'american', 'english', 'usa', 'uk', 'german', 'french', 'japanese',
+  'swedish', 'canadian', 'australian', 'irish', 'live', 'other', 'various',
+  '50s', '60s', '70s', '80s', '90s', '00s', '10s', '20s',
+]);
+
+/**
+ * The tags that actually describe how something sounds, best first.
+ *
+ * Ranked by how much they narrow the field rather than by raw votes: a
+ * two-word tag is nearly always a genuine sub-genre, and a broad shelf
+ * label only survives if nothing better is on offer.
+ */
+export function styleTags(entity, n = 3) {
+  const tags = (entity?.tags || []).filter(t => t?.name);
+  const scored = tags.map(t => {
+    const name = t.name.toLowerCase().trim();
+    const broad = BROAD_TAG.has(name);
+    const words = name.split(/[\s-]+/).length;
+    return {
+      name: t.name,
+      score: (broad ? -1000 : 0) + (t.count || 0) * 2 + (words > 1 ? 12 : 0),
+    };
+  });
+  return scored.sort((a, b) => b.score - a.score).slice(0, n).map(t => t.name);
+}
+
+/**
+ * Other artists working in a given style.
+ *
+ * MusicBrainz's search index accepts a Lucene `tag:` term, which means
+ * stylistic kinship needs no API key at all — it's the same free source as
+ * everything else on the backbone.
+ */
+export async function artistsByTag(tag, limit = 8) {
+  const data = await getJSON(`${WS}/artist?${q({ query: `tag:"${tag}"`, limit: String(limit) })}`);
+  return (data.artists || []).map(a => ({
+    id: a.id, name: a.name, type: a.type,
+    disambiguation: a.disambiguation || '',
+    score: a.score || 0,
+  }));
+}
+
+/** Other recordings in a given style. */
+export async function recordingsByTag(tag, limit = 8) {
+  const data = await getJSON(`${WS}/recording?${q({ query: `tag:"${tag}"`, limit: String(limit) })}`);
+  return (data.recordings || []).map(r => ({
+    id: r.id, title: r.title,
+    artist: credit(r['artist-credit']),
+    score: r.score || 0,
+  }));
+}
+
 /**
  * Pick the release that best represents a release-group: earliest dated,
  * preferring one with a country (i.e. an actual issued pressing rather than

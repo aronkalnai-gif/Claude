@@ -1,9 +1,14 @@
-/* Last.fm — the statistical layer.
+/* Last.fm — what people actually play, and what they call it.
 
-   This is the one source that answers "what else sounds like this", from
-   listening behaviour rather than documented fact. It supplies the fuzzy
-   edges MusicBrainz structurally cannot: nobody ever filed paperwork
-   saying Portishead and Massive Attack belong near each other. */
+   Two jobs, both optional. It knows an artist's most-played songs, which is
+   a better answer to "what are they known for" than whichever tracks got
+   pressed as singles. And its tags fill in a style for artists MusicBrainz
+   hasn't tagged yet.
+
+   What it deliberately does *not* supply any more is co-listening
+   similarity. "People who play this also play that" describes an audience,
+   not a sound — the overlap is often an accident of era or playlist. Style
+   comes from tags instead; see musicbrainz.js. */
 
 import { getJSON, SourceError } from '../net.js';
 import { settings, hasLastfm } from '../config.js';
@@ -25,29 +30,6 @@ function url(method, params) {
 function unwrap(data) {
   if (data && data.error) throw new SourceError('Last.fm', `${data.message || 'error'} (code ${data.error})`);
   return data;
-}
-
-export async function similarArtists(name, mbid, limit = 8) {
-  if (!hasLastfm()) return [];
-  const params = mbid ? { mbid, limit: String(limit) } : { artist: name, limit: String(limit) };
-  const data = unwrap(await getJSON(url('artist.getsimilar', params)));
-  return (data?.similarartists?.artist || []).map(a => ({
-    name: a.name,
-    mbid: a.mbid || null,
-    match: Number(a.match) || 0,
-  })).filter(a => a.name);
-}
-
-export async function similarTracks(artist, track, mbid, limit = 8) {
-  if (!hasLastfm()) return [];
-  const params = mbid ? { mbid, limit: String(limit) } : { artist, track, limit: String(limit) };
-  const data = unwrap(await getJSON(url('track.getsimilar', params)));
-  return (data?.similartracks?.track || []).map(t => ({
-    name: t.name,
-    artist: t.artist?.name || '',
-    mbid: t.mbid || null,
-    match: Number(t.match) || 0,
-  })).filter(t => t.name);
 }
 
 /**

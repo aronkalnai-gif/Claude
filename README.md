@@ -50,10 +50,10 @@ is fully usable the moment you open it; the optional keys each add a distinct
 
 | Source | Key needed | What it adds |
 |---|---|---|
-| **MusicBrainz** | — | The backbone. Band membership with instruments and date ranges, producer/engineer credits, which studio a session happened in, which label pressed it, singles, tracklists, and the song-behind-the-recording that links covers to originals. |
+| **MusicBrainz** | — | The backbone. Band membership with instruments and date ranges, producer/engineer credits, which studio a session happened in, which label pressed it, singles, tracklists, the song-behind-the-recording that links covers to originals, and — via its tag index — other artists and songs working in the same style. |
 | **Wikipedia** | — | The prose. Resolved via the Wikidata id MusicBrainz already stores, so it lands on the right article instead of guessing from a name. |
 | **Cover Art Archive** | — | Sleeve art on album and single nodes. |
-| **Last.fm** | free key | Two things: the statistical layer ("people who play this also play that" — the only source for connections nobody ever wrote down), and an artist's most-played songs, which is a better answer to "what are they known for" than whatever happened to get pressed as a single. [Get a key](https://www.last.fm/api/account/create) |
+| **Last.fm** | free key | An artist's most-played songs, which is a better answer to "what are they known for" than whatever happened to get pressed as a single; and tags that fill in a style for artists MusicBrainz hasn't tagged yet. [Get a key](https://www.last.fm/api/account/create) |
 | **Discogs** | free token | Session personnel: the sidemen and engineers on older records, where MusicBrainz often thins out. [Generate a token](https://www.discogs.com/settings/developers) |
 | **Claude** | API key | Turns each structured relationship into a sentence of real context. Grounded in the facts it's given, and instructed to stay silent rather than invent. [Console](https://console.anthropic.com/settings/keys) |
 
@@ -107,6 +107,15 @@ whatever it managed to gather.
 "sounds a bit like" tie floats out at the edge. The strength of a relationship
 is something you can read at a glance without touching anything.
 
+**Stylistic, not statistical.** Connections between artists who never met
+come from shared *style* — MusicBrainz tags, queried through its search
+index — not from co-listening data. "People who play this also play that"
+describes an audience, and an audience overlap is often an accident of era
+or playlist rather than anything you can hear. A tag only earns an edge if
+it's specific enough to be a claim about the music: "hard bop" and
+"psychedelic folk" qualify, "rock" doesn't. A useful side effect is that
+stylistic connections need no API key at all.
+
 **Songs come from two directions.** Last.fm knows which songs people actually
 play; MusicBrainz knows which ones were pressed as singles, at no extra
 request since the artist lookup already carries them. The same song often
@@ -148,9 +157,9 @@ Playwright available (globally is fine); the app itself has no dependencies.
   will say so explicitly. Everything else works regardless.
 - **Node budget.** A graph stops at 220 nodes and each expansion adds at most
   16. Past that it stops being a picture and starts being a hairball.
-- **Similar artists without an MBID are skipped.** Last.fm sometimes returns a
-  name with no MusicBrainz id; those would be dead ends on the graph, so they
-  aren't drawn rather than teasing a node that can't be opened.
+- **Stylistic kinship needs a specific tag.** An artist tagged only "rock", or
+  not tagged at all, gets no style edges — a tie that broad says nothing about
+  the music. A Last.fm key helps here, since its tags cover more artists.
 - **Songs need either a Last.fm key or a discography with singles in it.**
   Artists whose catalogue MusicBrainz only lists as albums will show songs
   once you open one of those albums, rather than straight off the artist.

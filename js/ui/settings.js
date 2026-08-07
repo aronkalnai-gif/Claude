@@ -45,8 +45,8 @@ export function createModal(root, titleEl, bodyEl, closeBtn) {
 
       <div class="field">
         <label for="f-lastfm">Last.fm API key</label>
-        <span class="hint">Adds "sounds like" connections — the statistical
-          links nobody ever wrote down.
+        <span class="hint">Adds an artist's most-played songs, and fills in a
+          style for artists MusicBrainz hasn't tagged yet.
           <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">Get one free ↗</a></span>
         <input id="f-lastfm" type="text" inputmode="latin" autocomplete="off"
           spellcheck="false" value="${esc(s.lastfmKey)}" placeholder="32-character key">
@@ -82,7 +82,7 @@ export function createModal(root, titleEl, bodyEl, closeBtn) {
 
       <div class="field">
         <label>Sources</label>
-        ${toggle('useLastfm', 'Last.fm similarity', s.useLastfm)}
+        ${toggle('useLastfm', 'Last.fm songs & tags', s.useLastfm)}
         ${toggle('useDiscogs', 'Discogs credits', s.useDiscogs)}
         ${toggle('useLlm', 'Written context', s.useLlm)}
         ${toggle('useCoverArt', 'Cover art', s.useCoverArt)}
@@ -125,7 +125,7 @@ export function createModal(root, titleEl, bodyEl, closeBtn) {
   const toggle = (name, label, on) => `
     <label style="display:flex;align-items:center;gap:10px;font-weight:400;margin:9px 0">
       <input type="checkbox" data-t="${name}" ${on ? 'checked' : ''}
-        style="width:auto;accent-color:#F0B429;transform:scale(1.2)">
+        style="width:auto;accent-color:#C4603F;transform:scale(1.2)">
       <span>${esc(label)}</span>
     </label>`;
 
@@ -134,7 +134,7 @@ export function createModal(root, titleEl, bodyEl, closeBtn) {
   async function renderDiagnostics() {
     const checks = buildChecks();
     bodyEl.innerHTML = `
-      <p class="hint" style="margin:0 0 16px;color:#9AA5B6;font-size:13px;line-height:1.55">
+      <p class="hint" style="margin:0 0 18px;color:var(--ink-dim);font-size:14px;line-height:1.55">
         Each source is contacted for real, from this device. A failure here is
         the actual reason something isn't appearing in the graph.
       </p>
@@ -202,6 +202,16 @@ export function createModal(root, titleEl, bodyEl, closeBtn) {
         },
       },
       {
+        name: 'MusicBrainz — style search',
+        run: async () => {
+          const d = await getJSON('https://musicbrainz.org/ws/2/artist?query=tag%3A%22hard%20bop%22&fmt=json&limit=3',
+            { cache: false, retries: 1 });
+          const names = (d.artists || []).map(a => a.name);
+          if (!names.length) throw new Error('tag search returned nothing');
+          return `hard bop → ${names.slice(0, 2).join(', ')}`;
+        },
+      },
+      {
         name: 'Wikipedia — summaries',
         run: async () => {
           const d = await getJSON('https://en.wikipedia.org/api/rest_v1/page/summary/Miles_Davis',
@@ -226,7 +236,7 @@ export function createModal(root, titleEl, bodyEl, closeBtn) {
         },
       },
       {
-        name: 'Last.fm — similarity',
+        name: 'Last.fm — songs & tags',
         skip: !s.lastfmKey ? 'no key set' : (!s.useLastfm ? 'switched off in settings' : null),
         run: lastfm.ping,
       },

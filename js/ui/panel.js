@@ -82,8 +82,9 @@ export function createPanel(el, body, { onExpand, onSelect, onClose }) {
          </section>`
       : '';
 
-    const tags = n.tags?.length
-      ? `<section><h4>Tagged</h4><p class="bio">${n.tags.map(esc).join(' · ')}</p></section>`
+    const styleList = n.styles?.length ? n.styles : n.tags;
+    const tags = styleList?.length
+      ? `<section><h4>Style</h4><p class="bio">${styleList.map(esc).join(' · ')}</p></section>`
       : '';
 
     const sessionNotes = n.discogs?.notes
@@ -147,7 +148,7 @@ export function createPanel(el, body, { onExpand, onSelect, onClose }) {
 /* Strongest ties first — that's the order someone reads them in anyway. */
 const ORDER = ['member', 'founded', 'collab', 'credit', 'produced', 'performed',
                'released', 'track', 'recordedAt', 'onLabel', 'wroteWork', 'otherTake',
-               'related', 'similar'];
+               'related', 'style'];
 const rank = k => { const i = ORDER.indexOf(k); return i < 0 ? 99 : i; };
 
 /* Turn "played bass in · 1971 – 1978" into something that still reads
@@ -172,7 +173,6 @@ function invert(label) {
     'is a version of': 'was also recorded as',
     'was recorded at': 'hosted the session for',
     'issued on': 'issued',
-    'similar listening': 'similar listening',
   };
   if (map[phrase]) return map[phrase] + tail;
   if (/^played .+ in$/.test(phrase)) return phrase.replace(/^played (.+) in$/, 'had $1 played by') + tail;

@@ -49,7 +49,7 @@ export const EDGE = {
   otherTake:   { weight: 0.55, color: '#7A4C6B', dash: [2, 5] },
   collab:      { weight: 0.70, color: '#C4603F', dash: null },
   related:     { weight: 0.50, color: '#8A8370', dash: [2, 5] },
-  similar:     { weight: 0.35, color: '#A39A83', dash: [2, 5] },
+  style:       { weight: 0.40, color: '#8A7B5E', dash: [3, 4] },
 };
 
 export const edgeStyle = k => EDGE[k] || EDGE.related;
