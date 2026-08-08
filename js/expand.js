@@ -251,10 +251,19 @@ async function expandArtist(ctx) {
  * are merely competent — so the last call is a judgement, made by the
  * model when there's a key for it and by sheer reach when there isn't.
  * Both are allowed to come back with nothing, which is the usual answer.
+ *
+ * Runs on its own allowance rather than the shared budget. Being last in
+ * the order, it would be the first thing starved if the earlier phases
+ * ever grew — today their caps sum to one less than the budget, so it has
+ * always had room, but that is a coincidence of two numbers in different
+ * places and not something to rely on. Its own cap of three is the limit
+ * that should decide how many performances appear.
  */
+const MAX_PERFORMANCES = 3;
+
 async function addPerformances(ctx, data) {
   const { node, onProgress } = ctx;
-  if (!hasYouTube() || ctx.budget <= 0) return;
+  if (!hasYouTube()) return;
 
   onProgress('looking for great performances…');
   try {
@@ -272,8 +281,9 @@ async function addPerformances(ctx, data) {
       picks = candidates.filter(v => v.views >= 1_000_000).slice(0, 2).map(v => ({ id: v.id, note: null }));
     }
 
+    let added = 0;
     for (const pick of picks) {
-      if (ctx.budget <= 0) break;
+      if (added >= MAX_PERFORMANCES) break;
       const v = candidates.find(c => c.id === pick.id);
       if (!v) continue;
 
@@ -291,6 +301,7 @@ async function addPerformances(ctx, data) {
         depth: node.depth + 1,
       }, { near: node });
       if (!show) continue;
+      added++;
 
       const edge = addEdge(node.id, show.id, 'playedLive',
         year ? `played live · ${year}` : 'played live');

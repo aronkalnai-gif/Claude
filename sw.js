@@ -20,6 +20,7 @@ const SHELL = [
   './js/net.js',
   './js/config.js',
   './js/expand.js',
+  './js/facts.js',
   './js/graph/layout.js',
   './js/graph/render.js',
   './js/ui/panel.js',
@@ -30,6 +31,7 @@ const SHELL = [
   './js/sources/discogs.js',
   './js/sources/coverart.js',
   './js/sources/llm.js',
+  './js/sources/youtube.js',
   './icons/icon.svg',
   './icons/apple-touch-icon.png',
 ];

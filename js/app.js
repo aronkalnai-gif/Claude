@@ -179,9 +179,23 @@ async function grow(node, { fit = true, select: selectAfter = false } = {}) {
     drawLegend();
     if (selectAfter) select(node.id, { center: false });
     if (fit) setTimeout(() => renderer.fitToGraph(), 420);
+    nudgeAboutPerformances(node);
   } catch (err) {
     status(err?.message || 'That lookup failed', { error: true, hold: 5000 });
   }
+}
+
+/* Every other optional source adds detail to something you can already
+   see — a sentence on an edge, a song among other songs. Concert footage
+   is the one that is simply absent without its key, with nothing on screen
+   to suggest it was ever meant to be there. So say it, once, the first
+   time it would have had something to show. */
+let nudged = false;
+function nudgeAboutPerformances(node) {
+  if (nudged || settings().youtubeKey) return;
+  if (!/^(person|group|artist)$/.test(node.kind)) return;
+  nudged = true;
+  setTimeout(() => status('Concert footage needs a YouTube key — add one under ⚙', { hold: 6000 }), 1400);
 }
 
 function select(id, { center = true } = {}) {

@@ -123,6 +123,16 @@ const fixtures = [
       { type: 'member of band', direction: 'backward', 'target-type': 'artist',
         begin: '1966', end: '1968', ended: true, attributes: ['guitar', 'founder'],
         artist: { id: ARTIST_ID, name: 'Ada Fixture', type: 'Person' } },
+      // A lineup long enough to drain the expansion budget before the last
+      // phase runs — which is the state a real band with a documented
+      // membership arrives in, and the state that used to lose the
+      // concert footage entirely.
+      ...Array.from({ length: 11 }, (_, i) => ({
+        type: 'member of band', direction: 'backward', 'target-type': 'artist',
+        begin: '1967', attributes: ['keyboards'],
+        artist: { id: `dddddddd-0000-0000-0000-${String(i).padStart(12, '0')}`,
+                  name: `Session Player ${i + 1}`, type: 'Person' },
+      })),
       { type: 'wikidata', direction: 'forward', 'target-type': 'url',
         url: { resource: 'https://www.wikidata.org/wiki/Q4242' } },
       // A page somebody entered, not a search we hope will land.
@@ -132,6 +142,17 @@ const fixtures = [
     'release-groups': [
       { id: RG_ID, title: 'Proof of Concept', 'primary-type': 'Album', 'first-release-date': '1967-12-05' },
       { id: SINGLE_ID, title: 'Regression', 'primary-type': 'Single', 'first-release-date': '1967-08-01' },
+      // Likewise a discography rather than a single record.
+      ...Array.from({ length: 4 }, (_, i) => ({
+        id: `eeeeeeee-0000-0000-0000-${String(i).padStart(12, '0')}`,
+        title: `Later Album ${i + 1}`, 'primary-type': 'Album',
+        'first-release-date': `${1968 + i}-05-01`,
+      })),
+      ...Array.from({ length: 4 }, (_, i) => ({
+        id: `ffffffff-0000-0000-0000-${String(i).padStart(12, '0')}`,
+        title: `B-side ${i + 1}`, 'primary-type': 'Single',
+        'first-release-date': `${1968 + i}-09-01`,
+      })),
     ],
   }],
   [new RegExp(`ws/2/artist/${ARTIST_ID}`), {
@@ -396,6 +417,20 @@ try {
     !shows.some(n => /one song/i.test(n.label)));
   check('the performance links straight to the video',
     shows.every(n => /youtube\.com\/watch\?v=/.test(n.watchUrl || '')));
+
+  // Performances run last, so they used to arrive at an empty budget and
+  // silently do nothing — for exactly the well-documented artists most
+  // likely to have a famous night on film.
+  // Performances run last, so they are what a crowded expansion would lose
+  // first. The fixture band has a twelve-strong lineup and nine releases to
+  // make this expansion as crowded as a real one.
+  const spent = await page.evaluate(async () => {
+    const m = await import('./js/state.js');
+    return { nodes: m.graph.nodes.size };
+  });
+  check('performances survive a crowded expansion',
+    shows.length > 0 && spent.nodes >= 22,
+    `${shows.length} performance(s) among ${spent.nodes} nodes`);
 
   // MusicBrainz placeholders. Left alone they connect everything to
   // everything: Various Artists alone stands in for hundreds of thousands
