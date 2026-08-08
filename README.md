@@ -56,11 +56,11 @@ is fully usable the moment you open it; the optional keys each add a distinct
 | Source | Key needed | What it adds |
 |---|---|---|
 | **MusicBrainz** | — | The backbone. Band membership with instruments and date ranges, producer/engineer credits, which studio a session happened in, which label pressed it, singles, tracklists, the song-behind-the-recording that links covers to originals, and — via its tag index — other artists and songs working in the same style. |
-| **Wikipedia** | — | The prose. Resolved via the Wikidata id MusicBrainz already stores, so it lands on the right article instead of guessing from a name. |
+| **Wikipedia** | — | The prose — the article's whole lead section, which is usually five or six sentences rather than the one the REST summary endpoint returns. Resolved via the Wikidata id MusicBrainz already stores, so it lands on the right article instead of guessing from a name. |
 | **Cover Art Archive** | — | Sleeve art on album and single nodes. |
 | **Last.fm** | free key | An artist's most-played songs, which is a better answer to "what are they known for" than whatever happened to get pressed as a single; and tags that fill in a style for artists MusicBrainz hasn't tagged yet. [Get a key](https://www.last.fm/api/account/create) |
 | **Discogs** | free token | Session personnel: the sidemen and engineers on older records, where MusicBrainz often thins out. [Generate a token](https://www.discogs.com/settings/developers) |
-| **Claude** | API key | Turns each structured relationship into a sentence of real context. Grounded in the facts it's given, and instructed to stay silent rather than invent. [Console](https://console.anthropic.com/settings/keys) |
+| **Claude** | API key | Two jobs. It turns each structured relationship into a sentence of real context, and it writes the five-or-six-sentence entry for the songs, studios and small labels Wikipedia has no article for — which is most songs. Grounded in the facts it's given, and instructed to write less rather than invent. [Console](https://console.anthropic.com/settings/keys) |
 
 ### About the keys
 
@@ -86,7 +86,9 @@ js/
   model.js               node kinds, edge kinds, and relationship → English
   net.js                 per-host throttling, caching, honest errors
   config.js              settings and keys
-  expand.js              the heart: given one thing, what belongs beside it
+  expand.js              the heart: given one thing, what belongs beside it,
+                         plus what to read about it when you open it
+  facts.js               "at a glance": MusicBrainz fields, reformatted
   graph/layout.js        hand-rolled force simulation
   graph/render.js        canvas renderer, pinch/pan/tap/drag
   ui/panel.js            the detail sheet
@@ -112,6 +114,23 @@ whatever it managed to gather.
 **Edge weight is distance.** A bandmate sits tight against their band; a
 "sounds a bit like" tie floats out at the edge. The strength of a relationship
 is something you can read at a glance without touching anything.
+
+**Reading matter is fetched when you open something, not when it appears.**
+One expansion adds twenty-odd nodes and most are never opened, so writing a
+paragraph about each on arrival would be slow and — with the model layer on —
+expensive. `detail()` runs for one node at a time, when you tap it, and
+caches on the node afterwards. It looks a node up properly even if you never
+expanded it, which is why tapping a name you've never opened still fills a
+sheet.
+
+**One paragraph, and you can always tell who wrote it.** The About block is
+Wikipedia's lead section when there's a real article, and Claude's entry when
+there isn't — never both, and the model is only asked at all when Wikipedia
+gave fewer than five sentences. A model-written paragraph says so underneath
+in as many words. Below it, "At a glance" is nothing but MusicBrainz fields
+reformatted: no source has been asked to interpret anything, an absent value
+just omits its row, and it works with no API keys at all. That block exists
+so there's always one part of the page a reader knows is simply the record.
 
 **Stylistic, not statistical.** Connections between artists who never met
 come from shared *style* — MusicBrainz tags, queried through its search

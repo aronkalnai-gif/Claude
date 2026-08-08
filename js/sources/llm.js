@@ -113,6 +113,90 @@ export async function annotate(subject, connections) {
   return out;
 }
 
+/* ── Profiles ───────────────────────────────────────────────────────── */
+
+/* The other job: a paragraph about the thing itself, not about one of its
+   connections. Wikipedia covers famous bands well and individual songs,
+   studios and small labels hardly at all — this fills that gap, and only
+   that gap. It is asked for a fixed length because the whole point is to
+   give a reader something to read; but "say less" always beats "make
+   something up", and the last rule says so plainly. */
+const PROFILE_SYSTEM = `You write the short entry a music reference book would carry for one subject: a song, a record, an artist, a studio or a label.
+
+Write 5 to 6 sentences, 90 to 150 words, as one paragraph.
+
+What to cover, as far as you genuinely know it: what the subject is and when; who made it and what they were doing at the time; what it sounds like, in concrete musical terms rather than adjectives; how it was made or received; and why someone exploring music would care. Prefer specifics — years, places, instruments, records, names — over evaluation.
+
+Rules:
+- Ground everything in the supplied facts plus music history you are confident about.
+- Never invent a fact, date, name, chart position or anecdote. Uncertain specifics must be left out, not hedged. Do not write "reportedly", "is said to be", "may have".
+- If you genuinely know little beyond the supplied facts, write fewer sentences about what is actually established. A short true entry is correct; a padded one is a failure.
+- If you cannot identify the subject with confidence, return an empty string.
+- No preamble, no bullet points, no headings, no exclamation marks. Do not open with "This is" — open with the subject.`;
+
+const PROFILE_SCHEMA = {
+  type: 'object',
+  properties: {
+    profile: {
+      type: 'string',
+      description: 'The entry, or an empty string if the subject cannot be identified with confidence.',
+    },
+  },
+  required: ['profile'],
+  additionalProperties: false,
+};
+
+/**
+ * @param {{label:string, kind:string}} subject
+ * @param {string[]} facts     lines of structured data from MusicBrainz
+ * @param {string} known       any encyclopedia prose we already have
+ * @returns {Promise<string>}  the paragraph, or '' if there's nothing honest to say
+ */
+export async function profile(subject, facts = [], known = '') {
+  if (!hasLlm()) return '';
+
+  const model = settings().anthropicModel || 'claude-opus-5';
+  const body = {
+    model,
+    max_tokens: 1200,
+    system: PROFILE_SYSTEM,
+    output_config: { format: { type: 'json_schema', schema: PROFILE_SCHEMA } },
+    messages: [{
+      role: 'user',
+      content:
+        `Subject: ${subject.label} — ${subject.kind}\n\n` +
+        (facts.length ? `Known facts:\n${facts.map(f => `- ${f}`).join('\n')}\n\n` : '') +
+        (known
+          ? `An encyclopedia already says this, so do not simply repeat it — continue past it:\n"""${known.slice(0, 700)}"""\n\n`
+          : '') +
+        'Write the entry.',
+    }],
+  };
+
+  if (SUPPORTS_EFFORT.test(model)) {
+    body.thinking = { type: 'disabled' };
+    body.output_config.effort = 'low';
+  }
+
+  const res = await postJSON(ENDPOINT, body, {
+    headers: {
+      'x-api-key': settings().anthropicKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+  });
+
+  if (res.stop_reason === 'refusal') return '';
+
+  const text = (res.content || []).find(b => b.type === 'text')?.text;
+  if (!text) return '';
+  try {
+    return String(JSON.parse(text).profile || '').trim();
+  } catch {
+    return '';
+  }
+}
+
 /** Used by the diagnostics panel. */
 export async function ping() {
   const notes = await annotate(

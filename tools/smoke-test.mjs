@@ -97,6 +97,7 @@ const fixtures = [
   [new RegExp(`ws/2/artist/${BAND_ID}`), {
     id: BAND_ID, name: 'The Testers', type: 'Group',
     disambiguation: 'test band', area: { name: 'London' },
+    'life-span': { begin: '1966', end: '1972', ended: true },
     tags: [{ name: 'psychedelic rock', count: 9 }, { name: 'blues rock', count: 4 }],
     relations: [
       { type: 'member of band', direction: 'backward', 'target-type': 'artist',
@@ -141,9 +142,27 @@ const fixtures = [
   }],
   [/ws\/2\/release\?label=/, { releases: [] }],
   [/wikidata\.org/, { entities: { Q4242: { sitelinks: { enwiki: { title: 'The Testers' } } } } }],
-  [/wikipedia\.org\/api\/rest_v1/, {
-    extract: 'The Testers were a fictional English rock group formed in London in 1966.',
-    content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/The_Testers' } },
+  // The lead section, as the Action API returns it — several sentences, so
+  // the sheet has something worth reading and the profile layer stays out
+  // of the way.
+  [/en\.wikipedia\.org\/w\/api\.php/, {
+    query: {
+      pages: {
+        4242: {
+          pageid: 4242,
+          title: 'The Testers',
+          fullurl: 'https://en.wikipedia.org/wiki/The_Testers',
+          extract:
+            'The Testers were a fictional English rock group formed in London in 1966. ' +
+            'The band was built around guitarist Ada Fixture and a rhythm section drawn from the city\'s club circuit. ' +
+            'Their second album, Regression, was cut over three weeks at Regression Studios in the summer of 1967. ' +
+            'Contemporary reviewers noted the group\'s unusually dry drum sound, which the engineer achieved by damping the kit with tea towels. ' +
+            'They disbanded in 1972 after a final tour of the Low Countries. ' +
+            'Reissues in the 1990s brought the catalogue back into print and a modest cult following with it.',
+          thumbnail: { source: 'https://upload.wikimedia.org/testers.jpg' },
+        },
+      },
+    },
   }],
 ];
 
@@ -346,6 +365,30 @@ try {
   check('detail sheet renders connections', /How it connects/.test(sheetHtml));
   check('detail sheet renders Wikipedia prose', /fictional English rock group/.test(sheetHtml));
   check('detail sheet offers listening links', /music\.apple\.com/.test(sheetHtml));
+
+  // The whole point of the About section is that there's something to read.
+  const prose = (sheetHtml.match(/<p class="bio">([\s\S]*?)<\/p>/) || [])[1] || '';
+  const sentences = (prose.match(/[^.!?]+[.!?]/g) || []).length;
+  check('about section runs to several sentences', sentences >= 5, `${sentences} sentences`);
+
+  check('at a glance lists structured facts',
+    /At a glance/.test(sheetHtml) && /Formed/.test(sheetHtml) && /London/.test(sheetHtml));
+
+  // Opening something you never expanded should still fill its sheet — this
+  // is the path that runs with no API keys at all.
+  const cold = await page.evaluate(async () => {
+    const m = await import('./js/state.js');
+    const { detail } = await import('./js/expand.js');
+    const { factsFor } = await import('./js/facts.js');
+    const person = [...m.graph.nodes.values()].find(n => n.kind === 'person' && !n.data);
+    if (!person) return { skipped: true };
+    await detail(person);
+    return { rows: factsFor(person), label: person.label };
+  });
+  check('opening an unexpanded node fetches its own facts',
+    !cold.skipped && cold.rows.length >= 2 && cold.rows.some(r => /Surrey/.test(r.value)),
+    cold.skipped ? 'no unexpanded person in the graph'
+                 : `${cold.label}: ${cold.rows.map(r => `${r.label} ${r.value}`).join(', ')}`);
 
   // Canvas actually painted something.
   const painted = await page.evaluate(() => {

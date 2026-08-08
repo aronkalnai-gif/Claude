@@ -64,7 +64,8 @@ export function createModal(root, titleEl, bodyEl, closeBtn) {
       <div class="field">
         <label for="f-anthropic">Anthropic API key</label>
         <span class="hint">Writes a sentence of real context for each
-          connection instead of just showing the raw relationship.
+          connection, and a short entry for the songs, studios and small
+          labels Wikipedia has no article for.
           <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Console ↗</a></span>
         <input id="f-anthropic" type="password" autocomplete="off" spellcheck="false"
           value="${esc(s.anthropicKey)}" placeholder="sk-ant-…">
@@ -212,12 +213,20 @@ export function createModal(root, titleEl, bodyEl, closeBtn) {
         },
       },
       {
-        name: 'Wikipedia — summaries',
+        name: 'Wikipedia — article text',
         run: async () => {
-          const d = await getJSON('https://en.wikipedia.org/api/rest_v1/page/summary/Miles_Davis',
+          // The same endpoint the app reads, not the shorter REST summary —
+          // a check that passes against a URL nothing uses is worthless.
+          const q = new URLSearchParams({
+            action: 'query', format: 'json', origin: '*', redirects: '1',
+            prop: 'extracts', exintro: '1', explaintext: '1', titles: 'Miles Davis',
+          });
+          const d = await getJSON(`https://en.wikipedia.org/w/api.php?${q}`,
             { cache: false, retries: 1 });
-          if (!d.extract) throw new Error('no extract in response');
-          return `${d.extract.length} characters of prose`;
+          const page = Object.values(d?.query?.pages || {})[0];
+          if (!page?.extract) throw new Error('no extract in response');
+          const n = (page.extract.match(/[^.!?]+[.!?]/g) || []).length;
+          return `${n} sentences of prose`;
         },
       },
       {

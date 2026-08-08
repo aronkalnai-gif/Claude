@@ -6,6 +6,8 @@
 
 import { graph, neighbours } from '../state.js';
 import { kindColor, kindLabel, listenLinks } from '../model.js';
+import { firstSentences } from '../sources/wikipedia.js';
+import { factsFor } from '../facts.js';
 
 export function createPanel(el, body, { onExpand, onSelect, onClose }) {
   let current = null;
@@ -64,13 +66,8 @@ export function createPanel(el, body, { onExpand, onSelect, onClose }) {
       ? `<img class="sheet-art" src="${esc(n.art)}" alt="" onerror="this.remove()">`
       : '';
 
-    const bio = n.bio?.extract
-      ? `<section>
-           <h4>About</h4>
-           <p class="bio">${esc(trim(n.bio.extract, 420))}</p>
-           ${n.bio.url ? `<div class="listen" style="margin-top:10px"><a href="${esc(n.bio.url)}" target="_blank" rel="noopener">Wikipedia ↗</a></div>` : ''}
-         </section>`
-      : '';
+    const bio = aboutSection(n);
+    const glance = glanceSection(n);
 
     const facts = links.length
       ? `<section>
@@ -82,8 +79,11 @@ export function createPanel(el, body, { onExpand, onSelect, onClose }) {
          </section>`
       : '';
 
+    // Style used to have a section of its own. It's a row in "At a glance"
+    // now, so this only fires for a node we haven't looked up yet — where
+    // the tags are all we have and a bare list is better than nothing.
     const styleList = n.styles?.length ? n.styles : n.tags;
-    const tags = styleList?.length
+    const tags = !glance && styleList?.length
       ? `<section><h4>Style</h4><p class="bio">${styleList.map(esc).join(' · ')}</p></section>`
       : '';
 
@@ -111,6 +111,7 @@ export function createPanel(el, body, { onExpand, onSelect, onClose }) {
       ${n.error ? `<section><h4>Couldn't finish</h4><p class="bio">${esc(n.error)}</p></section>` : ''}
       ${facts}
       ${bio}
+      ${glance}
       ${sessionNotes}
       ${tags}
 
@@ -121,6 +122,50 @@ export function createPanel(el, body, { onExpand, onSelect, onClose }) {
         </div>
       </section>
     `;
+  }
+
+  /* Wikipedia when there's a real article, the model's paragraph when
+     there isn't. Never both: one block of prose, and a line underneath
+     saying where it came from, because those two provenances are not
+     worth the same and a reader should be able to tell them apart. */
+  function aboutSection(n) {
+    const wiki = firstSentences(n.bio?.extract, 6);
+
+    if (wiki) {
+      return `<section>
+        <h4>About</h4>
+        <p class="bio">${esc(wiki)}</p>
+        ${n.bio.url
+          ? `<div class="listen" style="margin-top:12px"><a href="${esc(n.bio.url)}" target="_blank" rel="noopener">Read on Wikipedia ↗</a></div>`
+          : ''}
+      </section>`;
+    }
+
+    if (n.profile) {
+      return `<section>
+        <h4>About</h4>
+        <p class="bio">${esc(n.profile)}</p>
+        <p class="provenance">Written by Claude from the details below. Wikipedia has no article for this one, so treat it as a note rather than a source.</p>
+      </section>`;
+    }
+
+    if (n.detailing) {
+      return `<section><h4>About</h4><p class="bio waiting">Looking it up…</p></section>`;
+    }
+    return '';
+  }
+
+  /* The unglamorous block, and the only one on the page that is purely
+     what somebody typed into MusicBrainz. */
+  function glanceSection(n) {
+    const rows = factsFor(n);
+    if (!rows.length) return '';
+    return `<section>
+      <h4>At a glance</h4>
+      <dl class="glance">
+        ${rows.map(r => `<dt>${esc(r.label)}</dt><dd>${esc(r.value)}</dd>`).join('')}
+      </dl>
+    </section>`;
   }
 
   function factRow(self, edge, other, outgoing) {

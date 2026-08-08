@@ -4,7 +4,7 @@
 
 import { graph, reset, onChange, emit, nodeList, MAX_NODES } from './state.js';
 import { searchAll, rankCandidates } from './sources/musicbrainz.js';
-import { makeSeed, expand } from './expand.js';
+import { makeSeed, expand, detail } from './expand.js';
 import { createRenderer } from './graph/render.js';
 import { createPanel } from './ui/panel.js';
 import { createModal } from './ui/settings.js';
@@ -192,6 +192,10 @@ function select(id, { center = true } = {}) {
   syncInsets();                 // the sheet just changed how much canvas is visible
   if (center) renderer.centerOn(node);
   emit();
+
+  // Opening something is the signal to go and read about it. Not awaited:
+  // the sheet is already on screen, and it re-renders as each source lands.
+  detail(node, msg => { if (graph.selectedId === id) status(msg, { hold: 1200 }); });
 }
 
 /* ── Chrome ─────────────────────────────────────────────────────────── */

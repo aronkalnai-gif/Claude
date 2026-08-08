@@ -7,11 +7,12 @@
 import * as mb from './sources/musicbrainz.js';
 import * as lastfm from './sources/lastfm.js';
 import * as discogs from './sources/discogs.js';
-import { summaryFor } from './sources/wikipedia.js';
+import { summaryFor, sentenceCount } from './sources/wikipedia.js';
 import { releaseGroupArt, releaseArt, loadImage } from './sources/coverart.js';
-import { annotate } from './sources/llm.js';
+import { annotate, profile } from './sources/llm.js';
 import { addNode, addEdge, graph, nodeId, emit, findByLabel } from './state.js';
-import { describeRelation, artistKind } from './model.js';
+import { describeRelation, artistKind, kindLabel } from './model.js';
+import { factLines } from './facts.js';
 import { hasLastfm, hasDiscogs, hasLlm, settings } from './config.js';
 
 const REL_EDGE_KIND = {
@@ -448,6 +449,7 @@ async function expandAlbum(ctx) {
         depth: node.depth + 1,
       }, { near: node });
       if (!place) continue;
+      node.studioName = node.studioName || p.name;
       linkRelation(ctx, node, place, rel, `${node.label} was cut at ${p.name}`);
     }
 
@@ -467,6 +469,7 @@ async function expandAlbum(ctx) {
         depth: node.depth + 1,
       }, { near: node });
       if (!labelNode) continue;
+      node.labelName = node.labelName || l.name;
       const when = mb.year(release.date);
       record(ctx, addEdge(node.id, labelNode.id, 'onLabel', when ? `issued on · ${when}` : 'issued on'),
         labelNode, `came out on ${l.name}${when ? ` in ${when}` : ''}`);
@@ -474,7 +477,9 @@ async function expandAlbum(ctx) {
 
     // A handful of tracks — enough to give the record a shape without
     // burying the album under its own tracklist.
-    const tracks = mb.tracksOf(release).slice(0, 6);
+    const allTracks = mb.tracksOf(release);
+    node.trackCount = allTracks.length;
+    const tracks = allTracks.slice(0, 6);
     for (const t of tracks) {
       if (ctx.budget <= 0) break;
       const title = t.trackTitle || t.title;
@@ -766,13 +771,97 @@ function record(ctx, edge, other, extra, relationOverride) {
 /** Fetch a Wikipedia blurb in the background; never blocks the graph. */
 function attachBio(node, urls) {
   node.urls = { ...(node.urls || {}), ...urls };
-  if (node.bio) return;
-  summaryFor(urls).then(sum => {
-    if (!sum) return;
+  if (node.bio) return Promise.resolve(node.bio);
+  return summaryFor(urls).then(sum => {
+    if (!sum) return null;
     node.bio = sum;
     if (!node.art && sum.image && node.kind !== 'album') node.art = sum.image;
     emit();
-  });
+    return sum;
+  }).catch(() => null);
+}
+
+/* ── Detail ─────────────────────────────────────────────────────────── */
+
+/**
+ * Fill in everything the detail sheet wants to *say* about a node, as
+ * opposed to everything the graph wants to draw around it.
+ *
+ * This is deliberately separate from `expand`. Expanding adds twenty-odd
+ * nodes, and writing a paragraph about every one of them the moment it
+ * appears would be slow and, with the model layer on, expensive — most of
+ * them are never opened. So the reading matter is fetched for one thing at
+ * a time, when you actually open it, and cached on the node afterwards.
+ *
+ * Adds no nodes and no edges. Safe to call on anything, repeatedly.
+ */
+export async function detail(node, onProgress = () => {}) {
+  if (!node || node.detailing || node.detailed) return;
+  node.detailing = true;
+  emit();
+
+  try {
+    await ensureData(node);
+    emit();                                   // facts can show before the prose lands
+    await attachBio(node, node.urls || {});
+    await maybeProfile(node, onProgress);
+    node.detailed = true;
+  } catch (err) {
+    console.warn('[detail]', node.label, err);
+  } finally {
+    node.detailing = false;
+    emit();
+  }
+}
+
+const LOOKUP = {
+  artist: mb.lookupArtist,
+  'release-group': mb.lookupReleaseGroup,
+  release: mb.lookupRelease,
+  recording: mb.lookupRecording,
+  work: mb.lookupWork,
+  label: mb.lookupLabel,
+  place: mb.lookupPlace,
+};
+
+/* Most nodes arrive as a name and an id — everything else about them was
+   only ever fetched if you expanded them. Opening one is reason enough to
+   look it up properly, and the request cache makes a later expansion free. */
+async function ensureData(node) {
+  if (node.data || !node.mbid) return;
+  const lookup = LOOKUP[node.mbType];
+  if (!lookup) return;
+
+  node.data = await lookup(node.mbid);
+  node.tags = mb.topTags(node.data);
+  if (!node.styles?.length) {
+    const styles = mb.styleTags(node.data, 3);
+    if (styles.length) node.styles = styles;
+  }
+  node.urls = { ...(node.urls || {}), ...mb.externalUrls(node.data) };
+  if (node.mbType === 'artist' && !node.provisional) node.kind = artistKind(node.data);
+}
+
+/* Only when Wikipedia hasn't already answered the question. A well-covered
+   band arrives with three paragraphs of sourced prose and needs nothing
+   from a model; a B-side or a defunct studio arrives with nothing at all,
+   and that is the gap worth paying for. */
+async function maybeProfile(node, onProgress) {
+  if (node.profile || node.profileTried || !hasLlm()) return;
+  if (sentenceCount(node.bio?.extract) >= 5) return;
+
+  node.profileTried = true;
+  onProgress('reading up on it…');
+  try {
+    const text = await profile(
+      { label: node.label, kind: kindLabel(node.kind) },
+      factLines(node),
+      node.bio?.extract || '',
+    );
+    if (text) { node.profile = text; emit(); }
+  } catch (err) {
+    console.warn('[profile]', node.label, err);
+  }
 }
 
 const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
