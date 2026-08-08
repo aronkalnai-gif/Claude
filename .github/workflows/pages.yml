@@ -26,7 +26,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # `enablement` turns Pages on via the API if it isn't already, so the
+      # first deploy doesn't depend on someone flipping a switch in Settings.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       # No build step — the app is served exactly as it sits in the repo.
       - uses: actions/upload-pages-artifact@v3
         with:
