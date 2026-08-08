@@ -115,14 +115,33 @@ export function createPanel(el, body, { onExpand, onSelect, onClose }) {
       ${sessionNotes}
       ${tags}
 
-      ${canListen(n) ? `
-      <section>
-        <h4>Listen</h4>
-        <div class="listen">
-          ${listenLinks(n).map(l => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)} ↗</a>`).join('')}
-        </div>
-      </section>` : ''}
+      ${listenSection(n)}
     `;
+  }
+
+  /* Only offered once we know there's something to hear.
+     `listenable` is the answer from the check that runs on opening a node;
+     until it lands — or if the node was never opened — `canListen` is the
+     provisional read of what the graph already knows. Links MusicBrainz
+     stores directly go first and are marked, because those are a page
+     someone entered rather than a search that might find nothing. */
+  function listenSection(n) {
+    const direct = n.streaming || [];
+    const listenable = n.listenable ?? canListen(n);
+    if (!listenable && !direct.length) return '';
+
+    const have = new Set(direct.map(d => d.name));
+    const links = [...direct, ...(listenable ? listenLinks(n).filter(l => !have.has(l.name)) : [])];
+    if (!links.length) return '';
+
+    return `<section>
+      <h4>Listen</h4>
+      <div class="listen">
+        ${links.map(l => `<a class="${l.direct ? 'direct' : ''}" href="${esc(l.url)}"
+             target="_blank" rel="noopener"${l.direct ? ' title="Linked from MusicBrainz"' : ''}
+             >${esc(l.name)} ↗</a>`).join('')}
+      </div>
+    </section>`;
   }
 
   /* Wikipedia when there's a real article, the model's paragraph when

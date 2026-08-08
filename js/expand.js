@@ -848,6 +848,8 @@ export async function detail(node, onProgress = () => {}) {
   try {
     await ensureData(node);
     emit();                                   // facts can show before the prose lands
+    await checkListening(node);
+    emit();
     await attachBio(node, node.urls || {});
     await maybeProfile(node, onProgress);
     node.detailed = true;
@@ -885,6 +887,40 @@ async function ensureData(node) {
   }
   node.urls = { ...(node.urls || {}), ...mb.externalUrls(node.data) };
   if (node.mbType === 'artist' && !node.provisional) node.kind = artistKind(node.data);
+}
+
+/**
+ * Settle whether there is anything to listen to, per node, on opening it.
+ *
+ * Three answers in descending order of certainty. MusicBrainz often stores
+ * the artist's own Spotify or Apple Music page, which is a fact rather than
+ * a guess, so those links are used verbatim and prove the question at the
+ * same time. Failing that, anything released under the name settles it from
+ * data already in hand. Only when both come up empty do we spend a request
+ * asking whether a single recording is credited to them anywhere — which is
+ * what separates a session drummer, who has plenty to hear, from a sleeve
+ * photographer, who has none.
+ */
+const PERFORMER = /^(person|group|artist)$/;
+
+async function checkListening(node) {
+  if (node.listenable !== undefined) return;
+  node.streaming = mb.streamingUrls(node.data);
+
+  if (node.kind === 'place') { node.listenable = false; return; }
+  if (node.streaming.length) { node.listenable = true; return; }
+  if (!PERFORMER.test(node.kind)) { node.listenable = true; return; }  // records, songs, labels
+  if ((node.data?.['release-groups'] || []).length) { node.listenable = true; return; }
+  if (!node.mbid) { node.listenable = !!node.musical; return; }
+
+  try {
+    node.listenable = await mb.hasRecordings(node.mbid);
+  } catch (err) {
+    // A failed check shouldn't hide links from someone who plainly has
+    // music, so fall back to what the graph already told us.
+    console.warn('[listen check]', node.label, err);
+    node.listenable = !!node.musical;
+  }
 }
 
 /* Only when Wikipedia hasn't already answered the question. A well-covered

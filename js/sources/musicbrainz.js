@@ -153,6 +153,49 @@ export function externalUrls(entity) {
   return out;
 }
 
+/* Where you can actually hear it.
+
+   MusicBrainz stores the streaming pages themselves as url relations, which
+   beats guessing: a link to an artist's Spotify page is a fact somebody
+   entered, where a search URL is a hope. Matched on the host rather than on
+   the relation type, because the same page arrives as "free streaming",
+   "streaming" or "youtube" depending on who added it. */
+const SERVICES = [
+  { name: 'Apple Music', test: /(^|\/\/)(music|itunes)\.apple\.com\// },
+  { name: 'Spotify',     test: /open\.spotify\.com\// },
+  { name: 'YouTube',     test: /(music\.)?youtube\.com\/|youtu\.be\// },
+  { name: 'Bandcamp',    test: /\.bandcamp\.com/ },
+  { name: 'SoundCloud',  test: /soundcloud\.com\// },
+];
+
+/** Direct links to this entity on services that carry it. */
+export function streamingUrls(entity) {
+  const out = [], seen = new Set();
+  for (const rel of entity?.relations || []) {
+    if (rel['target-type'] !== 'url' || !rel.url?.resource) continue;
+    const res = rel.url.resource;
+    const svc = SERVICES.find(s => s.test.test(res));
+    if (!svc || seen.has(svc.name)) continue;
+    seen.add(svc.name);
+    out.push({ name: svc.name, url: res, direct: true });
+  }
+  return out.sort((a, b) =>
+    SERVICES.findIndex(s => s.name === a.name) - SERVICES.findIndex(s => s.name === b.name));
+}
+
+/**
+ * Is there anything at all credited to this artist?
+ *
+ * The last word on whether a person has music, for the cases the artist
+ * lookup can't settle: a session player releases nothing under their own
+ * name but appears on plenty of recordings, while a sleeve photographer
+ * appears on none. One request, and `limit=1` keeps it to a yes or no.
+ */
+export async function hasRecordings(mbid) {
+  const data = await getJSON(`${WS}/recording?${q({ artist: mbid, limit: '1' })}`);
+  return (data['recording-count'] ?? (data.recordings || []).length) > 0;
+}
+
 /** Relations of a given target type, e.g. relationsOfType(artist, 'artist'). */
 export const relationsOfType = (entity, targetType) =>
   (entity?.relations || []).filter(r => r['target-type'] === targetType);

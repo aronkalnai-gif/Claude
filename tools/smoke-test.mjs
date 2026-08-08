@@ -125,6 +125,9 @@ const fixtures = [
         artist: { id: ARTIST_ID, name: 'Ada Fixture', type: 'Person' } },
       { type: 'wikidata', direction: 'forward', 'target-type': 'url',
         url: { resource: 'https://www.wikidata.org/wiki/Q4242' } },
+      // A page somebody entered, not a search we hope will land.
+      { type: 'free streaming', direction: 'forward', 'target-type': 'url',
+        url: { resource: 'https://open.spotify.com/artist/thetesters' } },
     ],
     'release-groups': [
       { id: RG_ID, title: 'Proof of Concept', 'primary-type': 'Album', 'first-release-date': '1967-12-05' },
@@ -170,6 +173,13 @@ const fixtures = [
       { type: 'photography', direction: 'forward', 'target-type': 'release',
         release: { id: REL_ID, title: 'Proof of Concept' } },
     ],
+  }],
+  // The listening check itself. Nothing is credited to the photographer;
+  // Ada Fixture played on records without releasing any of her own.
+  [new RegExp(`ws/2/recording\\?.*artist=${SHOOTER}`), { 'recording-count': 0, recordings: [] }],
+  [new RegExp(`ws/2/recording\\?.*artist=${ARTIST_ID}`), {
+    'recording-count': 3,
+    recordings: [{ id: REC_ID, title: 'Assertion Blues' }],
   }],
   [/ws\/2\/release\?label=/, { releases: [] }],
   [/wikidata\.org/, { entities: { Q4242: { sitelinks: { enwiki: { title: 'The Testers' } } } } }],
@@ -224,10 +234,12 @@ page.on('console', m => {
 page.on('pageerror', e => errors.push(`uncaught: ${e.message}`));
 
 let apiCalls = 0;
+const apiUrls = [];
 await page.route('**/*', route => {
   const url = route.request().url();
   if (url.startsWith(base)) return route.continue();
   apiCalls++;
+  apiUrls.push(url);
   if (/coverartarchive\.org/.test(url)) return route.fulfill({ status: 404, body: '' });
   const hit = fixtures.find(([re]) => re.test(url));
   if (hit) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(hit[1]) });
@@ -457,12 +469,13 @@ try {
     return {
       role: shooter.role,
       sublabel: shooter.sublabel,
-      listen: canListen(shooter),
-      albumListens: canListen(album),
+      listenable: shooter.listenable,
+      albumListens: album?.listenable ?? canListen(album),
       edge: [...m.graph.edges.values()].find(e => e.kind === 'offstage')?.label,
       own, fromAlbum,
     };
   });
+  crew.probed = apiUrls.some(u => /recording\?.*artist=/.test(u));
 
   check('a non-musical credit says what it was',
     crew.edge === 'photographed', crew.edge || 'no offstage edge');
@@ -472,8 +485,11 @@ try {
   check('the person is labelled by what they actually did',
     crew.role === 'photographer' && crew.sublabel === 'photographer', crew.sublabel);
   check('someone with no music of their own is offered nowhere to listen',
-    crew.listen === false && !/music\.apple\.com/.test(crew.own || ''));
-  check('while a record still is', crew.albumListens === true);
+    crew.listenable === false && !/music\.apple\.com/.test(crew.own || ''),
+    `listenable: ${crew.listenable}`);
+  check('and the answer came from asking, not from guessing',
+    crew.probed === true, crew.probed ? 'recording browse was called' : 'no probe seen');
+  check('while a record still is', crew.albumListens !== false);
 
   // With no article and no model key, the sheet still has to say something.
   const summary = (crew.own?.match(/<p class="bio">([\s\S]*?)<\/p>/) || [])[1] || '';
@@ -483,6 +499,40 @@ try {
     `${(summary.match(/[^.!?]+[.!?]/g) || []).length} sentences`);
   check('and it says where it came from',
     /assembled from the catalogue rather than written/.test(summary));
+
+  // The case a heuristic gets wrong: a session player releases nothing
+  // under her own name but is all over other people's records.
+  const sideman = await page.evaluate(async () => {
+    const m = await import('./js/state.js');
+    const { detail } = await import('./js/expand.js');
+    const { createPanel } = await import('./js/ui/panel.js');
+    const n = [...m.graph.nodes.values()].find(x => x.label === 'Ada Fixture');
+    await detail(n);
+    const body = document.getElementById('sheet-body');
+    createPanel(document.getElementById('sheet'), body, {}).show(n);
+    return { listenable: n.listenable, releases: (n.data['release-groups'] || []).length, html: body.innerHTML };
+  });
+  check('a player with no records of their own still gets links',
+    sideman.listenable === true && /music\.apple\.com/.test(sideman.html),
+    `${sideman.releases} releases of her own, listenable: ${sideman.listenable}`);
+
+  // And where MusicBrainz holds the actual page, use it instead of a search.
+  const seedListen = await page.evaluate(async () => {
+    const m = await import('./js/state.js');
+    const { detail } = await import('./js/expand.js');
+    const { createPanel } = await import('./js/ui/panel.js');
+    const n = m.graph.nodes.get(m.graph.seedId);
+    await detail(n);
+    const body = document.getElementById('sheet-body');
+    createPanel(document.getElementById('sheet'), body, {}).show(n);
+    return { streaming: n.streaming, html: body.innerHTML };
+  });
+  check('a streaming page on file is linked directly, not searched for',
+    seedListen.streaming?.some(s => s.name === 'Spotify' && /open\.spotify\.com\/artist\//.test(s.url)) &&
+    /class="direct"[^>]*open\.spotify\.com\/artist\/thetesters/.test(seedListen.html.replace(/\s+/g, ' ')),
+    (seedListen.streaming || []).map(s => s.name).join(', ') || 'none found');
+  check('and the services with no page on file still fall back to search',
+    /music\.apple\.com\/search/.test(seedListen.html));
 
   // A node with nothing behind it must stop offering a button that does
   // nothing. Ada Fixture's lookup has no relations and no releases.

@@ -503,6 +503,10 @@ button { font: inherit; color: inherit; }
   transition: color .15s, border-color .15s;
 }
 .listen a:hover, .listen a:active { color: var(--rust); border-color: var(--rust); }
+/* A page MusicBrainz has on file, rather than a search that may find
+   nothing. Worth a firmer edge — it's the difference between a link and
+   a guess. */
+.listen a.direct { border-color: var(--rust); color: var(--ink); font-style: normal; }
 
 /* ── Modal ──────────────────────────────────────────────────────────── */
 

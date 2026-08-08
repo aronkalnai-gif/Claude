@@ -171,6 +171,18 @@ reformatted: no source has been asked to interpret anything, an absent value
 just omits its row, and it works with no API keys at all. That block exists
 so there's always one part of the page a reader knows is simply the record.
 
+**Whether there's anything to listen to is checked, not assumed.** Opening a
+node settles it in descending order of certainty. MusicBrainz often stores
+the artist's own Spotify or Apple Music page as a url relation — those are
+used verbatim, which answers the question and beats a search link at the
+same time, a stored page being a fact somebody entered where a search is a
+hope. Failing that, anything released under the name settles it from data
+already in hand. Only when both come up empty does it spend one request
+asking whether a single recording is credited to them anywhere. That last
+step is the point: a session drummer releases nothing under her own name and
+has plenty to hear, a sleeve photographer releases nothing and has none, and
+no heuristic short of asking tells those two apart.
+
 **Stylistic, not statistical.** Connections between artists who never met
 come from shared *style* — MusicBrainz tags, queried through its search
 index — not from co-listening data. "People who play this also play that"
