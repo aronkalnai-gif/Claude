@@ -88,13 +88,13 @@ async function searchRecordings(term) {
 /* ── Lookups ────────────────────────────────────────────────────────── */
 
 export const lookupArtist = mbid =>
-  getJSON(`${WS}/artist/${mbid}?${q({ inc: 'artist-rels url-rels tags release-groups' })}`);
+  getJSON(`${WS}/artist/${mbid}?${q({ inc: 'artist-rels url-rels tags genres release-groups' })}`);
 
 export const lookupReleaseGroup = mbid =>
-  getJSON(`${WS}/release-group/${mbid}?${q({ inc: 'artists artist-rels url-rels tags releases' })}`);
+  getJSON(`${WS}/release-group/${mbid}?${q({ inc: 'artists artist-rels url-rels tags genres releases' })}`);
 
 export const lookupRecording = mbid =>
-  getJSON(`${WS}/recording/${mbid}?${q({ inc: 'artists artist-rels work-rels url-rels tags releases' })}`);
+  getJSON(`${WS}/recording/${mbid}?${q({ inc: 'artists artist-rels work-rels url-rels tags genres releases' })}`);
 
 /* Releases carry the details a release-group can't: the track list, the
    label, and — the good one — `place-rels`, which is how you find out a
@@ -202,11 +202,34 @@ export async function hasRecordings(mbid) {
 export const relationsOfType = (entity, targetType) =>
   (entity?.relations || []).filter(r => r['target-type'] === targetType);
 
-/** Tags, most-voted first — a decent stand-in for genre. */
+/* MusicBrainz runs two tagging systems on the same entity. `tags` are
+   unmoderated folksonomy — anyone can add one, so coverage is wide and
+   quality is uneven. `genres` are the same mechanism restricted to a
+   fixed, moderated vocabulary: a genre called "afrobeat" was vouched for
+   as an actual genre, where a tag by that name might mean anything.
+   Preferring the genre when both exist is free precision for the same
+   word, so the two are merged once here rather than read separately by
+   every caller. */
+function folksonomy(entity) {
+  const out = new Map();
+  for (const g of entity?.genres || []) {
+    if (!g?.name) continue;
+    out.set(g.name.toLowerCase().trim(), { name: g.name, count: g.count || 0, curated: true });
+  }
+  for (const t of entity?.tags || []) {
+    if (!t?.name) continue;
+    const key = t.name.toLowerCase().trim();
+    if (out.has(key)) continue;   // the curated genre already covers this word
+    out.set(key, { name: t.name, count: t.count || 0, curated: false });
+  }
+  return [...out.values()];
+}
+
+/** Tags and genres, most-voted first with genres given first refusal — a
+    decent stand-in for style. */
 export const topTags = (entity, n = 4) =>
-  (entity?.tags || [])
-    .slice()
-    .sort((a, b) => (b.count || 0) - (a.count || 0))
+  folksonomy(entity)
+    .sort((a, b) => (b.curated - a.curated) || (b.count || 0) - (a.count || 0))
     .slice(0, n)
     .map(t => t.name);
 
@@ -234,14 +257,13 @@ const BROAD_TAG = new Set([
  * label only survives if nothing better is on offer.
  */
 export function styleTags(entity, n = 3) {
-  const tags = (entity?.tags || []).filter(t => t?.name);
-  const scored = tags.map(t => {
+  const scored = folksonomy(entity).map(t => {
     const name = t.name.toLowerCase().trim();
     const broad = BROAD_TAG.has(name);
     const words = name.split(/[\s-]+/).length;
     return {
       name: t.name,
-      score: (broad ? -1000 : 0) + (t.count || 0) * 2 + (words > 1 ? 12 : 0),
+      score: (broad ? -1000 : 0) + (t.count || 0) * 2 + (words > 1 ? 12 : 0) + (t.curated ? 20 : 0),
     };
   });
   return scored.sort((a, b) => b.score - a.score).slice(0, n).map(t => t.name);

@@ -48,6 +48,7 @@ const LABEL_ID  = '77777777-7777-7777-7777-777777777777';
 const SINGLE_ID = '88888888-8888-8888-8888-888888888888';
 const KIN_A     = 'aaaaaaaa-0000-0000-0000-000000000001';
 const KIN_B     = 'aaaaaaaa-0000-0000-0000-000000000002';
+const DISCOGS_REL = '999001';
 // MusicBrainz's real special-purpose ids, plus a bracketed name it doesn't
 // have an id for — the naming convention has to carry those on its own.
 const VARIOUS   = '89ad4ac3-39f7-470e-963a-56509c546377';
@@ -187,6 +188,43 @@ const fixtures = [
         artist: { id: SHOOTER, name: 'Lens Cap', type: 'Person' } },
     ],
   }],
+  // Discogs style-based kinship. Ordered ahead of the plain title-search
+  // fixture below, which would otherwise answer this one too — the same
+  // shadowing risk the MusicBrainz tag: fixtures had.
+  [/database\/search\?.*style=/, {
+    results: [
+      { id: 888001, title: 'Fela Kuti - Zombie', year: 1976 },
+      // Same artist as the album being expanded — must be filtered out,
+      // both by the exclude-artist match and by the title already being
+      // on the graph.
+      { id: 888002, title: 'The Testers - Proof of Concept', year: 1967 },
+      { id: 888003, title: 'Antibalas - Government Magic', year: 2007 },
+    ],
+  }],
+  // resolveReleaseId's title search, for the album's own Discogs release.
+  [/database\/search/, {
+    results: [{ id: DISCOGS_REL, title: 'The Testers - Proof of Concept', year: 1967 }],
+  }],
+  [new RegExp(`releases/${DISCOGS_REL}`), {
+    id: DISCOGS_REL,
+    uri: `https://www.discogs.com/release/${DISCOGS_REL}`,
+    year: 1967,
+    notes: 'Pressed in a hurry, in a studio nobody could later agree on.',
+    extraartists: [
+      { name: 'Some Engineer', role: 'Engineer' },
+      // Must be dropped: packaging, not the record.
+      { name: 'Sleeve Artist', role: 'Artwork By' },
+    ],
+    artists: [{ name: 'The Testers' }],
+    companies: [],
+    labels: [{ name: 'Assert Records' }],
+    // Discogs' own two-tier scheme: a broad genre, a specific style. The
+    // style is what should end up describing this record, not the artist-
+    // level MusicBrainz tag set elsewhere in this fixture file.
+    styles: ['Psychedelic Rock', 'Freakbeat'],
+    genres: ['Rock'],
+  }],
+
   [new RegExp(`ws/2/artist/${SHOOTER}`), {
     id: SHOOTER, name: 'Lens Cap', type: 'Person', area: { name: 'Paris' },
     tags: [], 'release-groups': [],
@@ -278,12 +316,16 @@ const base = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1024, height: 768 } });
 
-/* A YouTube key, so the concert path runs. Deliberately no Anthropic key:
+/* Keys for the two sources the smoke test needs live: YouTube, so the
+   concert path runs, and Discogs, so both its jobs — session personnel and
+   per-release style kinship — run too. Deliberately no Anthropic key:
    everything here has to hold up with the model layer switched off, which
-   also means the performance picks fall back to reach rather than
+   for performances also means the picks fall back to reach rather than
    judgement — the harder case to get right. */
 await page.addInitScript(() => {
-  localStorage.setItem('odyssey.settings.v1', JSON.stringify({ youtubeKey: 'test-key' }));
+  localStorage.setItem('odyssey.settings.v1', JSON.stringify({
+    youtubeKey: 'test-key', discogsToken: 'test-token',
+  }));
 });
 
 const errors = [];
@@ -335,7 +377,7 @@ const state = () => page.evaluate(async () => {
   return {
     nodes: m.nodeList().map(n => ({
       id: n.id, kind: n.kind, label: n.label, sublabel: n.sublabel,
-      expanded: n.expanded, watchUrl: n.watchUrl,
+      expanded: n.expanded, watchUrl: n.watchUrl, styles: n.styles,
     })),
     edges: m.edgeList().map(e => ({ kind: e.kind, label: e.label, a: e.a, b: e.b })),
     selected: m.graph.selectedId,
@@ -474,6 +516,47 @@ try {
   check('one song is not drawn twice under two MBIDs',
     s.nodes.filter(n => n.kind === 'track' && n.label === 'Regression').length === 1,
     `${s.nodes.filter(n => n.kind === 'track').map(n => n.label).join(', ')}`);
+
+  // Discogs: session credits, and records catalogued in the same style.
+  check('a dropped Discogs role never reaches the graph',
+    !s.nodes.some(n => n.label === 'Sleeve Artist'));
+  check('a kept Discogs role does',
+    s.nodes.some(n => n.label === 'Some Engineer' && n.sublabel === 'Engineer'));
+
+  const kinAlbums = s.nodes.filter(n => n.kind === 'album' && n.label !== 'Proof of Concept');
+  check('a record catalogued in the same style is offered',
+    kinAlbums.some(n => n.label === 'Zombie' && /Fela Kuti/.test(n.sublabel || '')),
+    kinAlbums.map(n => `${n.label} (${n.sublabel})`).join(' / ') || 'none');
+  check('another artist entirely in that style is offered too',
+    kinAlbums.some(n => n.label === 'Government Magic'));
+  check('the same artist\'s own record is not offered back to itself',
+    !kinAlbums.some(n => /The Testers/.test(n.sublabel || '')));
+  check('the album carries Discogs\' own style, not the artist-level MusicBrainz tag',
+    s.nodes.find(n => n.label === 'Proof of Concept')?.styles?.[0] === 'Psychedelic Rock',
+    JSON.stringify(s.nodes.find(n => n.label === 'Proof of Concept')?.styles));
+  check('the edge names the shared style',
+    s.edges.some(e => e.kind === 'style' && /Psychedelic Rock/.test(e.label || '')),
+    s.edges.filter(e => e.kind === 'style').map(e => e.label).join(' / '));
+
+  // The curated-vocabulary merge, tested directly against the function
+  // rather than through a fixture — it's a pure transform and deserves an
+  // isolated case rather than being inferred from graph shape.
+  const genrePref = await page.evaluate(async () => {
+    const mb = await import('./js/sources/musicbrainz.js');
+    const sameWord = mb.topTags({
+      tags: [{ name: 'Afrobeat', count: 5 }],
+      genres: [{ name: 'afrobeat', count: 5 }],
+    }, 4);
+    const outranks = mb.styleTags({
+      tags: [{ name: 'blues rock', count: 5 }],
+      genres: [{ name: 'Art Punk', count: 1 }],
+    }, 1);
+    return { sameWord, outranks };
+  });
+  check('a genre and a tag naming the same style do not duplicate',
+    genrePref.sameWord.length === 1, genrePref.sameWord.join(', '));
+  check('a curated genre can outrank a louder folksonomy tag',
+    genrePref.outranks[0] === 'Art Punk', genrePref.outranks.join(', '));
 
   // Let the layout finish, then check nothing is piled up. A second
   // expansion lands on an already-cooled graph, which is exactly the case
@@ -663,7 +746,12 @@ try {
   check('canvas is drawing the graph', painted > 20, `${painted} lit samples`);
 
   check('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
-  check('API calls were throttled and cached', apiCalls > 0 && apiCalls < 40, `${apiCalls} outbound requests`);
+  // The ceiling is a sanity check against a caching regression, not a
+  // budget — it was raised from 40 once YouTube and the Discogs style
+  // search started actually running in this test (both need a key, and
+  // now both have one), which is legitimate growth in what gets fetched
+  // rather than the same fetches happening twice.
+  check('API calls were throttled and cached', apiCalls > 0 && apiCalls < 55, `${apiCalls} outbound requests`);
 } catch (err) {
   check('test run completed', false, err.message);
 } finally {

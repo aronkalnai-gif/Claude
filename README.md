@@ -59,7 +59,7 @@ is fully usable the moment you open it; the optional keys each add a distinct
 | **Wikipedia** | — | The prose — the article's whole lead section, which is usually five or six sentences rather than the one the REST summary endpoint returns. Resolved via the Wikidata id MusicBrainz already stores, so it lands on the right article instead of guessing from a name. |
 | **Cover Art Archive** | — | Sleeve art on album and single nodes. |
 | **Last.fm** | free key | An artist's most-played songs, which is a better answer to "what are they known for" than whatever happened to get pressed as a single; and tags that fill in a style for artists MusicBrainz hasn't tagged yet. [Get a key](https://www.last.fm/api/account/create) |
-| **Discogs** | free token | Session personnel: the sidemen and engineers on older records, where MusicBrainz often thins out. [Generate a token](https://www.discogs.com/settings/developers) |
+| **Discogs** | free token | Two jobs. Session personnel — the sidemen and engineers on older records, where MusicBrainz often thins out — and other records catalogued in the same *style*, at the grain of one release rather than an artist's whole career. [Generate a token](https://www.discogs.com/settings/developers) |
 | **YouTube** | free key | Concert footage, from the artist's own channel or from a festival or broadcaster — never a fan recording. One search per artist, so a free key's daily quota covers about a hundred of them. [Enable it](https://console.cloud.google.com/apis/library/youtube.googleapis.com) |
 | **Claude** | API key | Three jobs. It turns each structured relationship into a sentence of real context, and it writes the five-or-six-sentence entry for the songs, studios and small labels Wikipedia has no article for — which is most songs. And it decides which of the concert videos above are performances anyone remembers. Grounded in the facts it's given, and instructed to write less rather than invent. [Console](https://console.anthropic.com/settings/keys) |
 
@@ -214,15 +214,26 @@ it's specific enough to be a claim about the music: "hard bop" and
 stylistic connections need no API key at all.
 
 Style is the one thing on the graph that isn't a documented fact, and it
-gets two shapes. Other *artists* working the same seam are drawn with
+gets three shapes. Other *artists* working the same seam are drawn with
 "both hard bop". Individual *songs* by people with no connection to the
 artist at all — pure "you might like this" — are drawn with "in the same
 style", never "released", and always carrying whoever actually recorded
 them: an unqualified song beside a band would imply an authorship the data
 doesn't support. Anything genuinely by the artist is filtered out of that
 set, because a song they recorded is a fact about them and belongs on a
-factual edge instead. Both kinds are dashed, and sort below every
-documented relationship in the panel.
+factual edge instead. And with a Discogs token, other *records* catalogued
+in the same style are drawn "both afrobeat" between two albums — the one
+case where the tag describes a specific release rather than an artist's
+whole output, so it's the one place two albums by the same band can end up
+in different neighbourhoods of the graph, which is the truer picture. All
+three kinds are dashed, and sort below every documented relationship in
+the panel.
+
+MusicBrainz's tags are folksonomy — anyone can add one, so coverage is wide
+and quality is uneven. It also runs a second, moderated vocabulary called
+`genres`, fetched alongside tags at no extra request; a genre by a given
+name is a curated claim, a tag by the same name might mean anything, and
+the merge prefers the genre whenever both exist for the same word.
 
 **Songs come from two directions.** Last.fm knows which songs people actually
 play; MusicBrainz knows which ones were pressed as singles, at no extra

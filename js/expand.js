@@ -609,11 +609,12 @@ async function expandAlbum(ctx) {
   }
 
   // Discogs fills in the sidemen MusicBrainz often lacks, especially on
-  // older jazz and blues sides.
+  // older jazz and blues sides — and its styles, catalogued per release,
+  // are the source `addAlbumStylisticKin` below draws on.
+  const artistName = mb.credit(source?.['artist-credit']);
   if (hasDiscogs() && ctx.budget > 0) {
     onProgress('checking the session personnel…');
     try {
-      const artistName = mb.credit(source?.['artist-credit']);
       const info = await discogs.creditsForAlbum({
         title: node.label,
         artistName,
@@ -621,6 +622,11 @@ async function expandAlbum(ctx) {
       });
       if (info) {
         node.discogs = info;
+        // Discogs' style is specific to this record, where the artist-level
+        // MusicBrainz tags set earlier describe their whole career — prefer
+        // it when there is one.
+        if (info.styles.length) node.styles = info.styles.slice(0, 3);
+
         // Only people we don't already have, and only real roles.
         const known = new Set([...graph.nodes.values()].map(n => n.label.toLowerCase()));
         for (const c of info.credits) {
@@ -642,6 +648,53 @@ async function expandAlbum(ctx) {
       }
     } catch (err) { console.warn('[discogs]', err); }
   }
+
+  await addAlbumStylisticKin(ctx, node, artistName);
+}
+
+/**
+ * Other records in the same style — Discogs' per-release styles rather
+ * than MusicBrainz's per-artist tags, which is the point: an artist's
+ * sound moves across a career, and this can say a specific record sits
+ * near Afrobeat while an earlier one by the same band sits near CBGB new
+ * wave, instead of pinning the whole discography to one shelf.
+ *
+ * Own allowance rather than the shared budget, same reasoning as
+ * `addPerformances` above — it runs last, and a well-documented album can
+ * spend the whole budget on credits before getting here.
+ */
+const MAX_ALBUM_KIN = 3;
+
+async function addAlbumStylisticKin(ctx, node, artistName) {
+  const { onProgress } = ctx;
+  if (!hasDiscogs() || !node.styles?.length) return;
+
+  const style = node.styles[0];
+  onProgress(`looking for other ${style} records…`);
+
+  try {
+    const kin = await discogs.releasesByStyle(style, { excludeArtist: artistName, limit: 8 });
+    let added = 0;
+    for (const r of kin) {
+      if (added >= MAX_ALBUM_KIN) break;
+      if (findByLabel('album', r.title)) continue;
+
+      const other = addNode({
+        id: nodeId('album', `discogs-${r.id}`),
+        kind: 'album', mbType: null, mbid: null,
+        label: r.title,
+        sublabel: [r.artist, style, r.year].filter(Boolean).join(' · '),
+        searchTerm: [r.artist, r.title].filter(Boolean).join(' '),
+        unlinked: true,          // no MBID — Discogs is as far as this goes
+        depth: node.depth + 1,
+      }, { near: node });
+      if (!other) continue;
+      added++;
+
+      record(ctx, addEdge(node.id, other.id, 'style', `both ${style}`),
+        other, `catalogued in the same style — ${style}`);
+    }
+  } catch (err) { console.warn('[album style kin]', err); }
 }
 
 /* ── Songs ──────────────────────────────────────────────────────────── */

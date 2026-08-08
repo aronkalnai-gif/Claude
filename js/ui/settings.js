@@ -56,7 +56,8 @@ export function createModal(root, titleEl, bodyEl, closeBtn) {
       <div class="field">
         <label for="f-discogs">Discogs personal token</label>
         <span class="hint">Adds session personnel — the sidemen and engineers
-          on older records.
+          on older records — and other records catalogued in the same style,
+          judged per record rather than by an artist's whole career.
           <a href="https://www.discogs.com/settings/developers" target="_blank" rel="noopener">Generate a token ↗</a></span>
         <input id="f-discogs" type="text" autocomplete="off" spellcheck="false"
           value="${esc(s.discogsToken)}" placeholder="personal access token">
@@ -96,7 +97,7 @@ export function createModal(root, titleEl, bodyEl, closeBtn) {
       <div class="field">
         <label>Sources</label>
         ${toggle('useLastfm', 'Last.fm songs & tags', s.useLastfm)}
-        ${toggle('useDiscogs', 'Discogs credits', s.useDiscogs)}
+        ${toggle('useDiscogs', 'Discogs credits & styles', s.useDiscogs)}
         ${toggle('useLlm', 'Written context', s.useLlm)}
         ${toggle('useYouTube', 'Concert footage', s.useYouTube)}
         ${toggle('useCoverArt', 'Cover art', s.useCoverArt)}

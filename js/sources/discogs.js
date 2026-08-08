@@ -56,7 +56,53 @@ export async function creditsForAlbum({ title, artistName, discogsUrl }) {
     credits: dedupe(credits).slice(0, 24),
     studios,
     labels: (rel.labels || []).map(l => l.name),
+    // Discogs runs the same two-tier scheme MusicBrainz does: `genre` is a
+    // handful of broad shelves (Rock, Electronic, Jazz), `style` is the
+    // specific claim (Afrobeat, Dub, Post-Punk) — and, critically, it's
+    // catalogued per *release* rather than per artist. A band's sound moves
+    // across a career; this is the source that can say so.
+    styles: rel.styles || [],
+    genres: rel.genres || [],
   };
+}
+
+/**
+ * Other records catalogued under a given style — the same question
+ * `artistsByTag` answers on MusicBrainz, asked of Discogs instead, at the
+ * finer grain of one specific record rather than an artist's whole output.
+ *
+ * Discogs' search has no "exclude this artist" operator, so the seed's own
+ * records are filtered out client-side by matching the credited artist
+ * against the release title Discogs returns as "Artist - Title" — a
+ * convention, not a guarantee, so this is a best effort rather than exact.
+ */
+export async function releasesByStyle(style, { excludeArtist = '', limit = 6 } = {}) {
+  if (!hasDiscogs() || !style) return [];
+
+  const res = await getJSON(`${API}/database/search?${auth({
+    style, type: 'release', per_page: String(limit * 3),
+  })}`).catch(() => null);
+
+  const exclude = excludeArtist.trim().toLowerCase();
+  const out = [];
+  for (const r of res?.results || []) {
+    const { artist, title } = splitCredit(r.title);
+    if (!title) continue;
+    if (exclude && artist.toLowerCase() === exclude) continue;
+    out.push({ id: r.id, title, artist, year: r.year || null });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/* "Fela Kuti - Zombie" → { artist: 'Fela Kuti', title: 'Zombie' }. Splits
+   on the first " - ", which is Discogs' own convention for this field, not
+   something the API guarantees — an artist name that itself contains
+   " - " would mis-split. Falls back to the whole string as the title,
+   which just means a slightly odd-looking label rather than a wrong one. */
+function splitCredit(raw) {
+  const m = String(raw || '').match(/^(.+?)\s+-\s+(.+)$/);
+  return m ? { artist: m[1].trim(), title: m[2].trim() } : { artist: '', title: String(raw || '').trim() };
 }
 
 async function resolveReleaseId({ title, artistName, discogsUrl }) {
