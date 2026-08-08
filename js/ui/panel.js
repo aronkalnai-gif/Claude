@@ -7,7 +7,7 @@
 import { graph, neighbours } from '../state.js';
 import { kindColor, kindLabel, listenLinks, canListen, NON_MUSICAL } from '../model.js';
 import { firstSentences } from '../sources/wikipedia.js';
-import { factsFor } from '../facts.js';
+import { factsFor, recordSummary } from '../facts.js';
 
 export function createPanel(el, body, { onExpand, onSelect, onClose }) {
   let current = null;
@@ -153,7 +153,14 @@ export function createPanel(el, body, { onExpand, onSelect, onClose }) {
     if (n.detailing) {
       return `<section><h4>About</h4><p class="bio waiting">Looking it up…</p></section>`;
     }
-    return '';
+
+    // Last resort, and better than an empty page: the catalogue entry said
+    // back as sentences. Every node that has been looked up can manage this
+    // much, with no article and no key.
+    const assembled = recordSummary(n);
+    return assembled
+      ? `<section><h4>About</h4><p class="bio">${esc(assembled)}</p></section>`
+      : '';
   }
 
   /* The unglamorous block, and the only one on the page that is purely

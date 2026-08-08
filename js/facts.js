@@ -7,6 +7,7 @@
    reader deserves one block on the page that is plainly just the record. */
 
 import { fmtDate } from './model.js';
+import { neighbours } from './state.js';
 import * as mb from './sources/musicbrainz.js';
 
 const credit = ac => mb.credit(ac);
@@ -18,14 +19,18 @@ export function factsFor(node) {
   const d = node?.data;
   if (!d) return [];
 
-  const rows = ({
+  const role = node.role
+    ? [{ label: 'Credited as', value: node.role }]
+    : [];
+
+  const rows = role.concat(({
     artist: artistFacts,
     'release-group': albumFacts,
     recording: songFacts,
     work: workFacts,
     label: labelFacts,
     place: placeFacts,
-  }[node.mbType] || (() => []))(d, node);
+  }[node.mbType] || (() => []))(d, node));
 
   const styles = node.styles?.length ? node.styles : node.tags;
   if (styles?.length) rows.push({ label: 'Style', value: styles.slice(0, 4).join(' · ') });
@@ -131,4 +136,102 @@ export function factLines(node) {
   const tags = mb.topTags(node.data, 6);
   if (tags.length) lines.push(`Tagged: ${tags.join(', ')}`);
   return lines;
+}
+
+/**
+ * A description assembled from the catalogue entry, for when there is no
+ * article and no key to write one.
+ *
+ * The alternative was leaving the block out, which is what a sleeve
+ * photographer used to get: a name, a job title and two rows. Everything
+ * here is a field restated — no inference about what anyone was like, no
+ * pronouns, and the last sentence says plainly where it came from.
+ */
+export function recordSummary(node) {
+  if (!node?.data) return '';
+  const d = node.data;
+  const at = f => factsFor(node).find(r => r.label === f)?.value;
+  const out = [];
+
+  const list = xs => xs.length > 1
+    ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`
+    : xs[0];
+
+  switch (node.mbType) {
+    case 'artist': {
+      out.push(node.role
+        ? `${node.label} appears here as a ${node.role} rather than as a performer.`
+        : `${node.label} is listed in MusicBrainz as ${d.type === 'Person' ? 'a person' : `a ${(d.type || 'group').toLowerCase()}`}.`);
+      const origin = at('From'), began = at('Formed') || at('Born'), ended = at('Disbanded') || at('Died');
+      if (origin || began) {
+        out.push([
+          origin ? `The catalogue gives ${origin} as the place of origin` : 'The catalogue records',
+          began ? `${origin ? ', and ' : ' '}${at('Born') ? 'a birth date of' : 'a start in'} ${began}` : '',
+          ended ? `, ending ${ended}` : '',
+        ].join('') + '.');
+      }
+      const releases = at('Releases listed');
+      out.push(releases
+        ? `${releases} release${releases === '1' ? '' : 's'} are filed under this name.`
+        : 'No releases are filed under this name.');
+      break;
+    }
+    case 'release-group':
+    case 'release':
+      out.push(`${node.label} is ${article(at('Type') || 'a release')} by ${at('By') || 'an unlisted artist'}.`);
+      if (at('First released')) out.push(`It was first released ${at('First released')}.`);
+      if (at('Label') || at('Recorded at')) {
+        out.push([at('Recorded at') && `cut at ${at('Recorded at')}`, at('Label') && `issued on ${at('Label')}`]
+          .filter(Boolean).join(', ').replace(/^./, c => c.toUpperCase()) + '.');
+      }
+      break;
+    case 'recording':
+      out.push(`${node.label} is a recording credited to ${at('By') || 'an unlisted artist'}.`);
+      if (at('Length')) out.push(`It runs ${at('Length')}.`);
+      if (at('Appears on')) out.push(`The earliest release carrying it is ${at('Appears on')}${at('First issued') ? `, from ${at('First issued')}` : ''}.`);
+      break;
+    case 'place':
+      out.push(`${node.label} is ${article(at('Type') || 'a place')}${at('Area') ? ` in ${at('Area')}` : ''}.`);
+      if (at('Address')) out.push(`Its address is given as ${at('Address')}.`);
+      if (at('Opened')) out.push(`It opened ${at('Opened')}${at('Closed') ? ` and closed ${at('Closed')}` : ''}.`);
+      break;
+    case 'label':
+      out.push(`${node.label} is a record label${at('From') ? ` from ${at('From')}` : ''}.`);
+      if (at('Founded')) out.push(`It was founded ${at('Founded')}${at('Closed') ? ` and closed ${at('Closed')}` : ''}.`);
+      break;
+    default:
+      return '';
+  }
+
+  const links = neighbours(node.id).map(n => n.node.label).slice(0, 3);
+  if (links.length) out.push(`On this web it connects to ${list(links)}.`);
+  if (at('Style')) out.push(`Listeners have tagged it ${at('Style')}.`);
+
+  out.push('No encyclopedia article was found for this entry, so the above is assembled from the catalogue rather than written.');
+  return out.join(' ');
+}
+
+const article = s => `${/^[aeiou]/i.test(s) ? 'an' : 'a'} ${s.toLowerCase()}`;
+
+/**
+ * The node's own edges, as sentences.
+ *
+ * These are often the most identifying thing we hold. "Type: Person, From:
+ * Paris" describes ten thousand people; "photographed Homogenic, directed
+ * the video for Big Time Sensuality" names exactly one — and it's the
+ * difference between a model writing the right entry and declining to
+ * write one at all.
+ */
+export function relationLines(node, limit = 12) {
+  if (!node?.id) return [];
+  return neighbours(node.id)
+    .slice(0, limit)
+    .map(({ edge, node: other, outgoing }) => {
+      const phrase = edge.label || edge.kind;
+      // Edge labels read subject → object, and `outgoing` says which end
+      // this node is standing on.
+      return outgoing
+        ? `${node.label} ${phrase} ${other.label}`
+        : `${other.label} ${phrase} ${node.label}`;
+    });
 }

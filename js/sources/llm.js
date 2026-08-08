@@ -121,17 +121,17 @@ export async function annotate(subject, connections) {
    that gap. It is asked for a fixed length because the whole point is to
    give a reader something to read; but "say less" always beats "make
    something up", and the last rule says so plainly. */
-const PROFILE_SYSTEM = `You write the short entry a music reference book would carry for one subject: a song, a record, an artist, a studio or a label.
+const PROFILE_SYSTEM = `You write the short entry a music reference book would carry for one subject. The subject may be a song, a record, a musician, a band, a studio or a label — but it may equally be someone credited on records without playing on them: a sleeve photographer, a designer, a video director, an engineer, a producer, a manager. Write about whoever or whatever you are actually given.
 
 Write 5 to 6 sentences, 90 to 150 words, as one paragraph.
 
-What to cover, as far as you genuinely know it: what the subject is and when; who made it and what they were doing at the time; what it sounds like, in concrete musical terms rather than adjectives; how it was made or received; and why someone exploring music would care. Prefer specifics — years, places, instruments, records, names — over evaluation.
+What to cover, as far as you genuinely know it: what the subject is and when; who made it, or whose work this person is known for; what it sounds like, in concrete musical terms rather than adjectives, where the subject is music; how it was made or received; and why someone exploring music would care. For a person who isn't a musician, say what their craft is, which records or artists they are associated with, and what is distinctive about their work — do not write about them as if they made the music. Prefer specifics — years, places, instruments, records, names — over evaluation.
 
 Rules:
-- Ground everything in the supplied facts plus music history you are confident about.
+- Ground everything in the supplied facts plus music history you are confident about. The listed connections are the strongest clue to who the subject is; use them.
 - Never invent a fact, date, name, chart position or anecdote. Uncertain specifics must be left out, not hedged. Do not write "reportedly", "is said to be", "may have".
-- If you genuinely know little beyond the supplied facts, write fewer sentences about what is actually established. A short true entry is correct; a padded one is a failure.
-- If you cannot identify the subject with confidence, return an empty string.
+- If you genuinely know little beyond the supplied facts, write fewer sentences about what is actually established — including, at minimum, what the supplied facts and connections themselves establish. A short true entry is correct; a padded one is a failure.
+- Return an empty string only if you cannot tell what the subject is even from the connections.
 - No preamble, no bullet points, no headings, no exclamation marks. Do not open with "This is" — open with the subject.`;
 
 const PROFILE_SCHEMA = {
@@ -148,11 +148,12 @@ const PROFILE_SCHEMA = {
 
 /**
  * @param {{label:string, kind:string}} subject
- * @param {string[]} facts     lines of structured data from MusicBrainz
- * @param {string} known       any encyclopedia prose we already have
+ * @param {string[]} facts        lines of structured data from MusicBrainz
+ * @param {string} known          any encyclopedia prose we already have
+ * @param {string[]} connections  the node's own edges, as sentences
  * @returns {Promise<string>}  the paragraph, or '' if there's nothing honest to say
  */
-export async function profile(subject, facts = [], known = '') {
+export async function profile(subject, facts = [], known = '', connections = []) {
   if (!hasLlm()) return '';
 
   const model = settings().anthropicModel || 'claude-opus-5';
@@ -166,6 +167,11 @@ export async function profile(subject, facts = [], known = '') {
       content:
         `Subject: ${subject.label} — ${subject.kind}\n\n` +
         (facts.length ? `Known facts:\n${facts.map(f => `- ${f}`).join('\n')}\n\n` : '') +
+        // Two facts about a photographer describe ten thousand people; the
+        // records he shot describe one.
+        (connections.length
+          ? `Documented connections:\n${connections.map(c => `- ${c}`).join('\n')}\n\n`
+          : '') +
         (known
           ? `An encyclopedia already says this, so do not simply repeat it — continue past it:\n"""${known.slice(0, 700)}"""\n\n`
           : '') +

@@ -475,6 +475,15 @@ try {
     crew.listen === false && !/music\.apple\.com/.test(crew.own || ''));
   check('while a record still is', crew.albumListens === true);
 
+  // With no article and no model key, the sheet still has to say something.
+  const summary = (crew.own?.match(/<p class="bio">([\s\S]*?)<\/p>/) || [])[1] || '';
+  check('a non-musician still gets a description',
+    /photographer rather than as a performer/.test(summary) &&
+    (summary.match(/[^.!?]+[.!?]/g) || []).length >= 4,
+    `${(summary.match(/[^.!?]+[.!?]/g) || []).length} sentences`);
+  check('and it says where it came from',
+    /assembled from the catalogue rather than written/.test(summary));
+
   // A node with nothing behind it must stop offering a button that does
   // nothing. Ada Fixture's lookup has no relations and no releases.
   const dead = await page.evaluate(async () => {

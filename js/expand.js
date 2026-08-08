@@ -12,7 +12,7 @@ import { releaseGroupArt, releaseArt, loadImage } from './sources/coverart.js';
 import { annotate, profile } from './sources/llm.js';
 import { addNode as storeNode, addEdge, graph, nodeId, emit, findByLabel } from './state.js';
 import { describeRelation, artistKind, kindLabel, isPlaceholder, NON_MUSICAL } from './model.js';
-import { factLines } from './facts.js';
+import { factLines, relationLines } from './facts.js';
 import { hasLastfm, hasDiscogs, hasLlm, settings } from './config.js';
 
 const REL_EDGE_KIND = {
@@ -899,9 +899,12 @@ async function maybeProfile(node, onProgress) {
   onProgress('reading up on it…');
   try {
     const text = await profile(
-      { label: node.label, kind: kindLabel(node.kind) },
+      // A photographer told he's "a Person" gets written up as a musician,
+      // or not written up at all. Lead with what the credits make him.
+      { label: node.label, kind: node.role || kindLabel(node.kind) },
       factLines(node),
       node.bio?.extract || '',
+      relationLines(node),
     );
     if (text) { node.profile = text; emit(); }
   } catch (err) {

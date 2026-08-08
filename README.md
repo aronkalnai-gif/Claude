@@ -158,7 +158,15 @@ sheet.
 Wikipedia's lead section when there's a real article, and Claude's entry when
 there isn't — never both, and the model is only asked at all when Wikipedia
 gave fewer than five sentences. A model-written paragraph says so underneath
-in as many words. Below it, "At a glance" is nothing but MusicBrainz fields
+in as many words. When there's neither an article nor a key, the block is
+assembled from the catalogue entry instead — every field restated as a
+sentence, no inference, and a closing line admitting as much. That last case
+is the sleeve photographer's, and it's the reason the block is never simply
+absent. What Claude is *told* matters as much: it's given the node's own
+edges, because "Type: Person, From: Paris" describes ten thousand people
+while "photographed Homogenic" describes one, and it's told the subject may
+be someone credited on records without playing on them. Below it, "At a
+glance" is nothing but MusicBrainz fields
 reformatted: no source has been asked to interpret anything, an absent value
 just omits its row, and it works with no API keys at all. That block exists
 so there's always one part of the page a reader knows is simply the record.
