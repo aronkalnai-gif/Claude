@@ -142,6 +142,43 @@ export function describeRelation(rel, { asSubject = true } = {}) {
 export const artistKind = a =>
   (a && /group|orchestra|choir/i.test(a.type || '')) ? 'group' : 'person';
 
+/* ── Placeholders ───────────────────────────────────────────────────── */
+
+/* MusicBrainz keeps a handful of "special purpose" entities that stand in
+   for the absence of an artist rather than naming one: a compilation is
+   credited to Various Artists, an untitled field recording to [unknown], a
+   spoken interlude to [dialogue]. They are bookkeeping, and they are poison
+   for a relationship graph — Various Artists alone stands in for hundreds
+   of thousands of compilations, so opening it connects Elvis Presley to
+   Madonna to Bruce Springsteen by way of nothing at all.
+
+   The ids are a belt; the naming convention is the braces, and the one that
+   actually catches them all. Square brackets are reserved for these stubs —
+   with the notable exception of the ska band [spunge], which is why a name
+   in brackets only counts as a placeholder when MusicBrainz hasn't typed it
+   as a group. Album and song titles are left alone: brackets are ordinary
+   punctuation in a title. */
+const SPECIAL_MBID = new Set([
+  '89ad4ac3-39f7-470e-963a-56509c546377',   // Various Artists
+  '125ec42a-7229-4250-afc5-e057484327fe',   // [unknown]
+  'eec63d3c-3b81-4ad4-b1e4-7c147d4d2b61',   // [no artist]
+  '9be7f096-97ec-4615-8957-8d40b5dcbc41',   // [traditional]
+  'f731ccc4-e22a-43af-a747-64213329e088',   // [anonymous]
+  '33cf029c-63b0-41a0-9855-be2a3665fb3b',   // [data]
+  'a0ef7e1d-44ff-4039-9435-7d5fefdeecc9',   // [dialogue]
+  '157afde4-4bf5-4039-8ad2-5a15acc85176',   // [no label]
+]);
+
+const STUB_KINDS = new Set(['person', 'artist', 'label', 'place']);
+
+/** True for anything that names an absence rather than a thing. */
+export function isPlaceholder({ kind, label, mbid } = {}) {
+  if (mbid && SPECIAL_MBID.has(mbid)) return true;
+  const name = String(label || '').trim();
+  if (/^various artists$/i.test(name)) return true;
+  return STUB_KINDS.has(kind) && /^\[.+\]$/.test(name);
+}
+
 export function listenLinks(node) {
   const q = encodeURIComponent(node.searchTerm || node.label);
   return [

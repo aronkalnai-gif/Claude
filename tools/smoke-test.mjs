@@ -48,6 +48,13 @@ const LABEL_ID  = '77777777-7777-7777-7777-777777777777';
 const SINGLE_ID = '88888888-8888-8888-8888-888888888888';
 const KIN_A     = 'aaaaaaaa-0000-0000-0000-000000000001';
 const KIN_B     = 'aaaaaaaa-0000-0000-0000-000000000002';
+// MusicBrainz's real special-purpose ids, plus a bracketed name it doesn't
+// have an id for — the naming convention has to carry those on its own.
+const VARIOUS   = '89ad4ac3-39f7-470e-963a-56509c546377';
+const UNKNOWN   = '125ec42a-7229-4250-afc5-e057484327fe';
+const DISNEY    = 'cccccccc-0000-0000-0000-00000000000d';
+// And the counter-example: a real band whose name is in brackets.
+const SPUNGE    = 'cccccccc-0000-0000-0000-00000000000e';
 
 const fixtures = [
   // Songs in a style, by strangers. Includes one recording by the seed band
@@ -70,15 +77,26 @@ const fixtures = [
   [/ws\/2\/artist\?.*tag/, {
     artists: [
       { id: BAND_ID, name: 'The Testers', type: 'Group', score: 100 },
+      // Placeholders are tagged with everything, so a tag search is exactly
+      // where they turn up. None of these may reach the graph.
+      { id: VARIOUS, name: 'Various Artists', type: 'Other', score: 99 },
+      { id: UNKNOWN, name: '[unknown]', type: 'Other', score: 98 },
+      { id: DISNEY, name: '[Disney]', type: 'Other', score: 97 },
       { id: KIN_A, name: 'Mock Turtle Soup', type: 'Group', score: 92 },
+      { id: SPUNGE, name: '[spunge]', type: 'Group', score: 90 },
       { id: KIN_B, name: 'The Stub Sessions', type: 'Group', score: 88 },
     ],
   }],
   [/ws\/2\/artist\?.*query=/, {
-    artists: [{
-      id: BAND_ID, name: 'The Testers', type: 'Group', score: 100,
-      disambiguation: 'test band', area: { name: 'London' }, 'life-span': { begin: '1966' },
-    }],
+    artists: [
+      {
+        id: BAND_ID, name: 'The Testers', type: 'Group', score: 100,
+        disambiguation: 'test band', area: { name: 'London' }, 'life-span': { begin: '1966' },
+      },
+      // Searching a common word surfaces this constantly. It must never be
+      // offered as something you can start a graph from.
+      { id: VARIOUS, name: 'Various Artists', type: 'Other', score: 99 },
+    ],
   }],
   [/ws\/2\/release-group\?.*query=/, {
     'release-groups': [{
@@ -245,6 +263,12 @@ try {
   const kinds = await page.$$eval('.result .kind', els => els.map(e => e.textContent.trim()));
   check('search returns mixed entity types', kinds.length >= 3, kinds.join(', '));
 
+  // Checked while the list is still on screen — it's gone once we click.
+  const offered = await page.$$eval('.result', els => els.map(e => e.textContent.trim()));
+  check('placeholders are not offered as something to search for',
+    !offered.some(t => /Various Artists/.test(t)),
+    offered.join(' / ').slice(0, 90));
+
   await page.click('.result[data-id^="group:"]');
   // Wait for the expansion to actually finish rather than for the first
   // nodes to appear: it makes several sequential MusicBrainz calls, and the
@@ -288,6 +312,17 @@ try {
     s.nodes.find(n => n.label === 'Fixture Drift')?.sublabel);
   check('a style match by the artist themselves is not offered as a stranger',
     !s.nodes.some(n => n.label === 'Own Work'));
+
+  // MusicBrainz placeholders. Left alone they connect everything to
+  // everything: Various Artists alone stands in for hundreds of thousands
+  // of compilations.
+  const stubs = s.nodes.filter(n =>
+    /^(various artists|\[unknown\]|\[Disney\]|\[no artist\]|\[dialogue\])$/i.test(n.label));
+  check('MusicBrainz placeholders never reach the graph',
+    stubs.length === 0,
+    stubs.length ? stubs.map(n => n.label).join(', ') : 'none of Various Artists, [unknown], [Disney]');
+  check('a real band whose name is in brackets is kept',
+    s.nodes.some(n => n.label === '[spunge]'));
   check('no co-listening edges remain',
     !s.edges.some(e => e.kind === 'similar'));
   check('a song carries how it was released',
@@ -385,6 +420,24 @@ try {
     await detail(person);
     return { rows: factsFor(person), label: person.label };
   });
+  // A node with nothing behind it must stop offering a button that does
+  // nothing. Ada Fixture's lookup has no relations and no releases.
+  const dead = await page.evaluate(async () => {
+    const m = await import('./js/state.js');
+    const { expand } = await import('./js/expand.js');
+    const person = [...m.graph.nodes.values()].find(n => n.label === 'Ada Fixture');
+    if (!person) return { missing: true };
+    await expand(person).catch(() => {});
+    const { createPanel } = await import('./js/ui/panel.js');
+    const p = createPanel(document.getElementById('sheet'), document.getElementById('sheet-body'), {});
+    p.show(person);
+    const btn = document.querySelector('#sheet-body [data-act="expand"]');
+    return { unlinked: !!person.unlinked, label: btn?.textContent.trim(), disabled: !!btn?.disabled };
+  });
+  check('a node with nothing behind it stops offering to expand',
+    dead.unlinked && dead.disabled && /Nothing more to open/.test(dead.label || ''),
+    dead.missing ? 'Ada Fixture not in the graph' : `button: "${dead.label}", disabled: ${dead.disabled}`);
+
   check('opening an unexpanded node fetches its own facts',
     !cold.skipped && cold.rows.length >= 2 && cold.rows.some(r => /Surrey/.test(r.value)),
     cold.skipped ? 'no unexpanded person in the graph'

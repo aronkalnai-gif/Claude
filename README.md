@@ -115,6 +115,24 @@ whatever it managed to gather.
 "sounds a bit like" tie floats out at the edge. The strength of a relationship
 is something you can read at a glance without touching anything.
 
+**Placeholders are refused at the door.** MusicBrainz keeps special-purpose
+entities that stand in for the *absence* of an artist — a compilation is
+credited to Various Artists, an untitled field recording to `[unknown]`, a
+spoken interlude to `[dialogue]`. They are bookkeeping, and they are poison
+here: Various Artists alone stands in for hundreds of thousands of
+compilations, so opening it joins Elvis Presley to Madonna to Bruce
+Springsteen by way of nothing at all. Every node `expand.js` creates passes
+through one wrapper that drops them, because a rule enforced at eleven of
+twelve call sites is not a rule. The ids are a belt; the naming convention
+is the braces — except for the ska band `[spunge]`, so a bracketed name only
+counts as a stub when MusicBrainz hasn't typed it as a group.
+
+**A button that does nothing shouldn't be offered.** Expansion is
+deterministic over cached data, so a pass that added nothing means the next
+one would add nothing either. When that happens the node is marked closed,
+the button reads "Nothing more to open", and the little dot that says
+"there's more here" comes off it on the canvas.
+
 **Reading matter is fetched when you open something, not when it appears.**
 One expansion adds twenty-odd nodes and most are never opened, so writing a
 paragraph about each on arrival would be slow and — with the model layer on —

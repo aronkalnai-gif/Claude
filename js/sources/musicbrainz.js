@@ -7,7 +7,7 @@
    pressed the record. That's where the good facts live. */
 
 import { getJSON } from '../net.js';
-import { artistKind } from '../model.js';
+import { artistKind, isPlaceholder } from '../model.js';
 
 const WS = 'https://musicbrainz.org/ws/2';
 
@@ -24,10 +24,15 @@ export function searchAll(query, onPartial = () => {}) {
   const term = query.trim();
   if (!term) return Promise.resolve([]);
 
+  // Filtered here as well as in rankCandidates, because `onPartial` shows
+  // its list before the ranking runs — otherwise "Various Artists" would
+  // flash up in the results and then vanish.
+  const drop = list => list.filter(c => !isPlaceholder(c));
+
   const jobs = [
-    searchArtists(term).then(r => (onPartial(r), r)),
-    searchReleaseGroups(term).then(r => (onPartial(r), r)),
-    searchRecordings(term).then(r => (onPartial(r), r)),
+    searchArtists(term).then(drop).then(r => (onPartial(r), r)),
+    searchReleaseGroups(term).then(drop).then(r => (onPartial(r), r)),
+    searchRecordings(term).then(drop).then(r => (onPartial(r), r)),
   ];
 
   return Promise.allSettled(jobs).then(res =>
@@ -40,6 +45,7 @@ export function rankCandidates(list) {
   // someone typing a bare name almost always means.
   const bias = { person: 6, group: 8, album: 3, track: 0 };
   return list
+    .filter(c => !isPlaceholder(c))
     .map(c => ({ ...c, rank: (c.score || 0) + (bias[c.kind] || 0) }))
     .sort((a, b) => b.rank - a.rank)
     .slice(0, 12);

@@ -10,8 +10,8 @@ import * as discogs from './sources/discogs.js';
 import { summaryFor, sentenceCount } from './sources/wikipedia.js';
 import { releaseGroupArt, releaseArt, loadImage } from './sources/coverart.js';
 import { annotate, profile } from './sources/llm.js';
-import { addNode, addEdge, graph, nodeId, emit, findByLabel } from './state.js';
-import { describeRelation, artistKind, kindLabel } from './model.js';
+import { addNode as storeNode, addEdge, graph, nodeId, emit, findByLabel } from './state.js';
+import { describeRelation, artistKind, kindLabel, isPlaceholder } from './model.js';
 import { factLines } from './facts.js';
 import { hasLastfm, hasDiscogs, hasLlm, settings } from './config.js';
 
@@ -48,6 +48,18 @@ const REL_EDGE_KIND = {
 const PER_EXPANSION_BUDGET = 26;
 const MAX_PEOPLE = 10;
 
+/* Every node this file creates goes through here, which is the point:
+   there are a dozen places that mint one — band members, sidemen, track
+   lists, tag searches — and a rule enforced at eleven of them is not a
+   rule. The store stays dumb and this is where the judgement lives, so a
+   placeholder is refused once, on the way in. Callers already cope with a
+   null (it's what hitting the node ceiling returns), so nothing else
+   needed changing. */
+function addNode(spec, opts) {
+  if (isPlaceholder(spec)) return null;
+  return storeNode(spec, opts);
+}
+
 /* ── Entry points ───────────────────────────────────────────────────── */
 
 /** Turn a search result into the first node of a fresh graph. */
@@ -77,10 +89,14 @@ export function makeSeed(candidate) {
  * @param {(msg: string) => void} onProgress
  */
 export async function expand(node, onProgress = () => {}) {
-  if (!node || node.expanding || node.expanded) return;
+  // `unlinked`, not `expanded`: a node that hit the budget on its first
+  // pass may still have more behind it, and the button says "Expand again"
+  // for a reason. What stops the loop is finding nothing, not having tried.
+  if (!node || node.expanding || node.unlinked) return;
   node.expanding = true;
   emit();
 
+  const before = graph.nodes.size + graph.edges.size;
   const ctx = {
     node,
     added: [],          // {edge, otherLabel, otherKind, relation, extra}
@@ -100,6 +116,13 @@ export async function expand(node, onProgress = () => {}) {
       default:              await expandArtist(ctx);
     }
     node.expanded = true;
+
+    // Nothing new came back. Expansion is deterministic over cached data —
+    // the same sources, walked in the same order, with the same budget —
+    // so a pass that added nothing means the next one would add nothing
+    // either. Say so on the node instead of leaving a button that looks
+    // like it does something.
+    if (graph.nodes.size + graph.edges.size === before) node.unlinked = true;
   } catch (err) {
     node.error = err?.message || String(err);
     // A failed expansion still leaves whatever it managed to add — better a
