@@ -46,15 +46,32 @@ const REC_ID    = '55555555-5555-5555-5555-555555555555';
 const PLACE_ID  = '66666666-6666-6666-6666-666666666666';
 const LABEL_ID  = '77777777-7777-7777-7777-777777777777';
 const SINGLE_ID = '88888888-8888-8888-8888-888888888888';
+const KIN_A     = 'aaaaaaaa-0000-0000-0000-000000000001';
+const KIN_B     = 'aaaaaaaa-0000-0000-0000-000000000002';
 
 const fixtures = [
+  // Songs in a style, by strangers. Includes one recording by the seed band
+  // itself and one whose title is already on the graph — both must be
+  // filtered out rather than drawn.
+  [/ws\/2\/recording\?.*tag/, {
+    recordings: [
+      { id: 'bbbbbbbb-0000-0000-0000-000000000001', title: 'Fixture Drift', score: 95,
+        'artist-credit': [{ name: 'Mock Turtle Soup', artist: { id: KIN_A, name: 'Mock Turtle Soup' } }] },
+      { id: 'bbbbbbbb-0000-0000-0000-000000000002', title: 'Regression', score: 93,
+        'artist-credit': [{ name: 'The Stub Sessions', artist: { id: KIN_B, name: 'The Stub Sessions' } }] },
+      { id: 'bbbbbbbb-0000-0000-0000-000000000003', title: 'Own Work', score: 91,
+        'artist-credit': [{ name: 'The Testers', artist: { id: BAND_ID, name: 'The Testers' } }] },
+      { id: 'bbbbbbbb-0000-0000-0000-000000000004', title: 'Second Stranger', score: 90,
+        'artist-credit': [{ name: 'Mock Turtle Soup', artist: { id: KIN_A, name: 'Mock Turtle Soup' } }] },
+    ],
+  }],
   // Stylistic kinship: a tag query, answered with two artists in that style
   // plus the seed itself (which must be filtered out).
   [/ws\/2\/artist\?.*tag/, {
     artists: [
       { id: BAND_ID, name: 'The Testers', type: 'Group', score: 100 },
-      { id: 'aaaaaaaa-0000-0000-0000-000000000001', name: 'Mock Turtle Soup', type: 'Group', score: 92 },
-      { id: 'aaaaaaaa-0000-0000-0000-000000000002', name: 'The Stub Sessions', type: 'Group', score: 88 },
+      { id: KIN_A, name: 'Mock Turtle Soup', type: 'Group', score: 92 },
+      { id: KIN_B, name: 'The Stub Sessions', type: 'Group', score: 88 },
     ],
   }],
   [/ws\/2\/artist\?.*query=/, {
@@ -173,10 +190,25 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? '✓' : '✗'} ${name}${detail ? ` — ${detail}` : ''}`);
 };
 
+/* Poll from Node rather than using page.waitForFunction.
+   waitForFunction evaluates the predicate in the page and checks the result
+   for truthiness — and an async predicate returns a *Promise*, which is
+   always truthy. Every such wait therefore succeeds on its first tick and
+   waits for nothing. Reading module state needs a dynamic import, so the
+   predicate has to be async; polling here keeps the await honest. */
+async function waitFor(label, predicate, timeout = 45000) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    if (await page.evaluate(predicate)) return;
+    await page.waitForTimeout(250);
+  }
+  throw new Error(`timed out waiting for ${label}`);
+}
+
 const state = () => page.evaluate(async () => {
   const m = await import('./js/state.js');
   return {
-    nodes: m.nodeList().map(n => ({ id: n.id, kind: n.kind, label: n.label, expanded: n.expanded })),
+    nodes: m.nodeList().map(n => ({ id: n.id, kind: n.kind, label: n.label, sublabel: n.sublabel, expanded: n.expanded })),
     edges: m.edgeList().map(e => ({ kind: e.kind, label: e.label, a: e.a, b: e.b })),
     selected: m.graph.selectedId,
   };
@@ -195,11 +227,14 @@ try {
   check('search returns mixed entity types', kinds.length >= 3, kinds.join(', '));
 
   await page.click('.result[data-id^="group:"]');
-  await page.waitForFunction(async () => {
+  // Wait for the expansion to actually finish rather than for the first
+  // nodes to appear: it makes several sequential MusicBrainz calls, and the
+  // rate limit means the last of them lands seconds after the first.
+  await waitFor('the seed expansion to finish', async () => {
     const m = await import('./js/state.js');
-    return m.nodeList().length > 1;
-  }, null, { timeout: 20000 });
-  await page.waitForTimeout(1500);
+    return m.graph.nodes.get(m.graph.seedId)?.expanded === true;
+  });
+  await page.waitForTimeout(400);
 
   let s = await state();
   check('seed expands into a graph', s.nodes.length >= 3, `${s.nodes.length} nodes, ${s.edges.length} edges`);
@@ -223,6 +258,17 @@ try {
     s.edges.filter(e => e.kind === 'style').every(e => e.a !== e.b) &&
     s.nodes.filter(n => n.label === 'The Testers').length === 1,
     s.edges.filter(e => e.kind === 'style').map(e => `${e.a}→${e.b}`).join(' '));
+  check('unrelated songs that merely sound alike are offered',
+    s.nodes.some(n => n.label === 'Fixture Drift'),
+    s.edges.find(e => /in the same style/.test(e.label || ''))?.label || 'none');
+  check('such a song is not presented as the artist\'s own work',
+    /in the same style/.test(
+      s.edges.find(e => e.b === s.nodes.find(n => n.label === 'Fixture Drift')?.id)?.label || ''));
+  check('and it names who actually recorded it',
+    /Mock Turtle Soup/.test(s.nodes.find(n => n.label === 'Fixture Drift')?.sublabel || ''),
+    s.nodes.find(n => n.label === 'Fixture Drift')?.sublabel);
+  check('a style match by the artist themselves is not offered as a stranger',
+    !s.nodes.some(n => n.label === 'Own Work'));
   check('no co-listening edges remain',
     !s.edges.some(e => e.kind === 'similar'));
   check('a song carries how it was released',

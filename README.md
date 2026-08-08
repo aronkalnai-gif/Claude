@@ -116,6 +116,17 @@ it's specific enough to be a claim about the music: "hard bop" and
 "psychedelic folk" qualify, "rock" doesn't. A useful side effect is that
 stylistic connections need no API key at all.
 
+Style is the one thing on the graph that isn't a documented fact, and it
+gets two shapes. Other *artists* working the same seam are drawn with
+"both hard bop". Individual *songs* by people with no connection to the
+artist at all — pure "you might like this" — are drawn with "in the same
+style", never "released", and always carrying whoever actually recorded
+them: an unqualified song beside a band would imply an authorship the data
+doesn't support. Anything genuinely by the artist is filtered out of that
+set, because a song they recorded is a fact about them and belongs on a
+factual edge instead. Both kinds are dashed, and sort below every
+documented relationship in the panel.
+
 **Songs come from two directions.** Last.fm knows which songs people actually
 play; MusicBrainz knows which ones were pressed as singles, at no extra
 request since the artist lookup already carries them. The same song often
@@ -156,7 +167,13 @@ Playwright available (globally is fine); the app itself has no dependencies.
   setting that header. If Discogs credits never appear, run Diagnostics — it
   will say so explicitly. Everything else works regardless.
 - **Node budget.** A graph stops at 220 nodes and each expansion adds at most
-  16. Past that it stops being a picture and starts being a hairball.
+  26, of which at most 10 are people — otherwise a large lineup would use up
+  the whole expansion before any records or songs appeared. Past that it
+  stops being a picture and starts being a hairball.
+- **An artist expansion makes three sequential MusicBrainz calls** (the
+  lookup, then one each for kindred artists and kindred songs), and the rate
+  limit means roughly a second between them. Nodes are drawn as each lands
+  rather than all at the end.
 - **Stylistic kinship needs a specific tag.** An artist tagged only "rock", or
   not tagged at all, gets no style edges — a tie that broad says nothing about
   the music. A Last.fm key helps here, since its tags cover more artists.

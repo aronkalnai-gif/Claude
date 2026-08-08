@@ -213,11 +213,14 @@ export async function artistsByTag(tag, limit = 8) {
 }
 
 /** Other recordings in a given style. */
-export async function recordingsByTag(tag, limit = 8) {
+export async function recordingsByTag(tag, limit = 10) {
   const data = await getJSON(`${WS}/recording?${q({ query: `tag:"${tag}"`, limit: String(limit) })}`);
   return (data.recordings || []).map(r => ({
     id: r.id, title: r.title,
     artist: credit(r['artist-credit']),
+    // Kept so callers can tell a stranger's record from one by the artist
+    // they're already looking at.
+    artistIds: (r['artist-credit'] || []).map(c => c.artist?.id).filter(Boolean),
     score: r.score || 0,
   }));
 }

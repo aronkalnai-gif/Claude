@@ -39,10 +39,13 @@ const REL_EDGE_KIND = {
   'engineered at': 'recordedAt',
 };
 
-// Raised from 16 when songs joined albums and people in the same pass:
-// an artist needs room for bandmates, records *and* songs before the
-// similarity edges start competing for slots.
-const PER_EXPANSION_BUDGET = 20;
+/* An artist expansion now has five categories competing for room —
+   bandmates, records, their songs, kindred artists, and songs that merely
+   sound alike. The budget is sized so the last of those still gets a
+   showing, and people are capped so a large lineup can't eat everything
+   ahead of them. */
+const PER_EXPANSION_BUDGET = 26;
+const MAX_PEOPLE = 10;
 
 /* ── Entry points ───────────────────────────────────────────────────── */
 
@@ -150,9 +153,12 @@ async function expandArtist(ctx) {
   attachBio(node, urls);
 
   // 1. People and bands: the strongest ties, so they go on first and get
-  //    first claim on the budget.
+  //    first claim on the budget — but not all of it. An orchestra with
+  //    forty documented members would otherwise swallow the whole
+  //    expansion and you'd never see a record or a song.
+  let people = 0;
   for (const rel of mb.relationsOfType(data, 'artist')) {
-    if (ctx.budget <= 0) break;
+    if (ctx.budget <= 0 || people >= MAX_PEOPLE) break;
     const other = rel.artist;
     if (!other?.id) continue;
     const kind = artistKind(other);
@@ -164,8 +170,10 @@ async function expandArtist(ctx) {
       depth: node.depth + 1,
     }, { near: node });
     if (!target) continue;
+    people++;
     linkRelation(ctx, node, target, rel);
   }
+  emit();   // let the first ring appear before the next request goes out
 
   // 2. Their records.
   for (const rg of mb.notableAlbums(data, 4)) {
@@ -187,13 +195,19 @@ async function expandArtist(ctx) {
       album, yr ? `released ${rg.title} in ${yr}` : `released ${rg.title}`);
   }
 
+  emit();
+
   // 3. Their songs. An artist without individual songs on the web is a
   //    discography, not a map of what they made — so this runs from two
   //    independent angles and takes whichever it can get.
   await addSongsForArtist(ctx, data);
+  emit();
 
-  // 4. Stylistic kin.
-  await addStylisticKin(ctx, data);
+  // 4. Stylistic kin: other artists working the same seam, and songs by
+  //    people with no connection to this one that simply sound like it.
+  const styles = await addStylisticKin(ctx, data);
+  emit();
+  await addStylisticSongsForArtist(ctx, styles);
 }
 
 /**
@@ -211,7 +225,6 @@ async function expandArtist(ctx) {
  */
 async function addStylisticKin(ctx, data) {
   const { node, onProgress } = ctx;
-  if (ctx.budget <= 0) return;
 
   let styles = mb.styleTags(data, 2);
 
@@ -224,8 +237,9 @@ async function addStylisticKin(ctx, data) {
     } catch (err) { console.warn('[lastfm tags]', err); }
   }
 
-  if (!styles.length) return;
+  if (!styles.length) return [];
   node.styles = styles;
+  if (ctx.budget <= 0) return styles;
 
   const style = styles[0];
   onProgress(`looking for other ${style}…`);
@@ -253,6 +267,60 @@ async function addStylisticKin(ctx, data) {
         target, `works in the same style — ${style}`);
     }
   } catch (err) { console.warn('[style kin]', err); }
+
+  return styles;
+}
+
+/**
+ * Songs by people with no connection to the artist at all, that simply
+ * sound like them.
+ *
+ * Every other edge on the graph is a documented fact — someone played on
+ * something, a session happened in a room. These are the opposite: pure
+ * "you might like this", justified only by a shared style. That makes two
+ * things load-bearing.
+ *
+ * First, they must never read as the artist's own work. The edge says "in
+ * the same style", not "released", and the node carries whoever actually
+ * made it — because a green dot next to a band, unqualified, would imply
+ * authorship the data doesn't support.
+ *
+ * Second, anything actually *by* this artist is filtered out. A song they
+ * recorded is a fact about them and belongs on a factual edge, not in a
+ * list of strangers.
+ */
+async function addStylisticSongsForArtist(ctx, styles) {
+  const { node, onProgress } = ctx;
+  if (!styles?.length || ctx.budget <= 0) return;
+
+  const style = styles[0];
+  onProgress(`listening for other ${style}…`);
+
+  try {
+    const kin = await mb.recordingsByTag(style, 12);
+    let added = 0;
+    for (const r of kin) {
+      if (ctx.budget <= 0 || added >= 3) break;
+      if (r.artistIds?.includes(node.mbid)) continue;   // their own record
+      if (findByLabel('track', r.title)) continue;
+      if (graph.nodes.has(nodeId('track', r.id))) continue;
+
+      const song = addNode({
+        id: nodeId('track', r.id),
+        kind: 'track', mbType: 'recording', mbid: r.id,
+        label: r.title,
+        // The performer goes first: this is somebody else's song.
+        sublabel: [r.artist, style].filter(Boolean).join(' · '),
+        searchTerm: `${r.artist} ${r.title}`,
+        depth: node.depth + 1,
+      }, { near: node });
+      if (!song) continue;
+      added++;
+      record(ctx, addEdge(node.id, song.id, 'style', `in the same style · ${style}`),
+        song,
+        `"${r.title}" is by ${r.artist || 'another artist'}, not by ${node.label}; the only link is the shared style`);
+    }
+  } catch (err) { console.warn('[style songs]', err); }
 }
 
 /**
@@ -523,10 +591,10 @@ async function expandRecording(ctx) {
   // Songs in the same style. A recording's own tags are often thin, so fall
   // back to the style of whoever made it — which is usually what someone
   // means by "something else that sounds like this" anyway.
-  await addStylisticSongs(ctx, rec);
+  await addStylisticSongsForRecording(ctx, rec);
 }
 
-async function addStylisticSongs(ctx, rec) {
+async function addStylisticSongsForRecording(ctx, rec) {
   const { node, onProgress } = ctx;
   if (ctx.budget <= 0) return;
 
