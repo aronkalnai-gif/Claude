@@ -542,7 +542,12 @@ button { font: inherit; color: inherit; }
   font-size: 14px; line-height: 1.5; margin-bottom: 9px;
 }
 .field .hint a { color: var(--rust); text-underline-offset: 3px; }
-.field input, .field select {
+/* `:not([type=checkbox])` is doing real work here. The rule strips the
+   native appearance to make text fields match the paper, and a checkbox
+   caught by it renders as a blank rounded box with no tick — so the
+   Sources list looked switched off whatever its actual state, on the one
+   screen where knowing which sources are live is the entire point. */
+.field input:not([type="checkbox"]), .field select {
   width: 100%;
   padding: 10px 13px;
   border: 1px solid var(--rule);
@@ -554,8 +559,15 @@ button { font: inherit; color: inherit; }
   outline: none;
   -webkit-appearance: none;
 }
-.field input:focus, .field select:focus { border-color: var(--rust); background: #FFFDF7; }
+.field input:not([type="checkbox"]):focus, .field select:focus {
+  border-color: var(--rust); background: #FFFDF7;
+}
 .field input::placeholder { color: var(--ink-faint); font-style: italic; }
+
+.field input[type="checkbox"] {
+  width: 21px; height: 21px; flex: none; margin: 0;
+  accent-color: var(--rust);
+}
 
 .note {
   padding: 14px 16px;

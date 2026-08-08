@@ -140,8 +140,7 @@ export function createModal(root, titleEl, bodyEl, closeBtn) {
 
   const toggle = (name, label, on) => `
     <label style="display:flex;align-items:center;gap:10px;font-weight:400;margin:9px 0">
-      <input type="checkbox" data-t="${name}" ${on ? 'checked' : ''}
-        style="width:auto;accent-color:#C4603F;transform:scale(1.2)">
+      <input type="checkbox" data-t="${name}" ${on ? 'checked' : ''}>
       <span>${esc(label)}</span>
     </label>`;
 
