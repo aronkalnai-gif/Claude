@@ -26,6 +26,7 @@ export const KIND = {
   work:   { label: 'Work',    color: '#7A4C6B', r: 20 },
   label:  { label: 'Label',   color: '#6B7566', r: 20 },
   place:  { label: 'Studio',  color: '#A34E58', r: 20 },
+  live:   { label: 'Performance', color: '#5B5E96', r: 22 },
 };
 
 export const kindColor = k => (KIND[k] || KIND.work).color;
@@ -43,6 +44,7 @@ export const EDGE = {
   track:       { weight: 0.80, color: '#4A7A4E', dash: null },
   performed:   { weight: 0.75, color: '#7E8A72', dash: null },
   produced:    { weight: 0.70, color: '#7A4C6B', dash: null },
+  playedLive:  { weight: 0.70, color: '#5B5E96', dash: null },
   recordedAt:  { weight: 0.65, color: '#A34E58', dash: [5, 4] },
   onLabel:     { weight: 0.55, color: '#6B7566', dash: [5, 4] },
   wroteWork:   { weight: 0.60, color: '#7A4C6B', dash: [5, 4] },

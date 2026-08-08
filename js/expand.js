@@ -7,13 +7,14 @@
 import * as mb from './sources/musicbrainz.js';
 import * as lastfm from './sources/lastfm.js';
 import * as discogs from './sources/discogs.js';
+import * as youtube from './sources/youtube.js';
 import { summaryFor, sentenceCount } from './sources/wikipedia.js';
 import { releaseGroupArt, releaseArt, loadImage } from './sources/coverart.js';
-import { annotate, profile } from './sources/llm.js';
+import { annotate, profile, curatePerformances } from './sources/llm.js';
 import { addNode as storeNode, addEdge, graph, nodeId, emit, findByLabel } from './state.js';
 import { describeRelation, artistKind, kindLabel, isPlaceholder, NON_MUSICAL } from './model.js';
 import { factLines, relationLines } from './facts.js';
-import { hasLastfm, hasDiscogs, hasLlm, settings } from './config.js';
+import { hasLastfm, hasDiscogs, hasLlm, hasYouTube, settings } from './config.js';
 
 const REL_EDGE_KIND = {
   'member of band': 'member',
@@ -232,6 +233,83 @@ async function expandArtist(ctx) {
   const styles = await addStylisticKin(ctx, data);
   emit();
   await addStylisticSongsForArtist(ctx, styles);
+
+  // 5. Nights worth watching, if there are any.
+  emit();
+  await addPerformances(ctx, data);
+}
+
+/**
+ * Concert footage — but only from a channel we can name, and only where
+ * the night itself is the point.
+ *
+ * The bar is deliberately hard to clear. YouTube's answer to "artist live"
+ * is mostly phone footage, and the fix isn't ranking it better, it's
+ * refusing everything whose source we can't identify: the artist's own
+ * channel, resolved from the link MusicBrainz stores, or a festival or
+ * broadcaster on a curated list. That leaves real concerts, of which most
+ * are merely competent — so the last call is a judgement, made by the
+ * model when there's a key for it and by sheer reach when there isn't.
+ * Both are allowed to come back with nothing, which is the usual answer.
+ */
+async function addPerformances(ctx, data) {
+  const { node, onProgress } = ctx;
+  if (!hasYouTube() || ctx.budget <= 0) return;
+
+  onProgress('looking for great performances…');
+  try {
+    const own = await youtube.channelIdFor(mb.externalUrls(data).youtube);
+    const candidates = await youtube.concertsFor(node.label, own);
+    if (!candidates.length) return;
+
+    let picks = await curatePerformances(node.label, candidates)
+      .catch(err => (console.warn('[curate]', err), []));
+
+    // No model to judge with: fall back to reach. A blunt instrument, so
+    // the threshold is set where "a lot of people have sought this out"
+    // starts to mean something.
+    if (!picks.length && !hasLlm()) {
+      picks = candidates.filter(v => v.views >= 1_000_000).slice(0, 2).map(v => ({ id: v.id, note: null }));
+    }
+
+    for (const pick of picks) {
+      if (ctx.budget <= 0) break;
+      const v = candidates.find(c => c.id === pick.id);
+      if (!v) continue;
+
+      const year = String(v.published || '').slice(0, 4);
+      const show = addNode({
+        id: nodeId('live', v.id),
+        kind: 'live', mbType: null, mbid: null,
+        label: trimTitle(v.title),
+        sublabel: [v.channelTitle, year].filter(Boolean).join(' · '),
+        searchTerm: `${node.label} ${v.title}`,
+        watchUrl: v.url,
+        streaming: [{ name: 'YouTube', url: v.url, direct: true }],
+        listenable: true,
+        unlinked: true,          // a video is a leaf; there's nothing behind it
+        depth: node.depth + 1,
+      }, { near: node });
+      if (!show) continue;
+
+      const edge = addEdge(node.id, show.id, 'playedLive',
+        year ? `played live · ${year}` : 'played live');
+      if (edge && pick.note) edge.lore = pick.note;
+      record(ctx, edge, show, `a performance published by ${v.channelTitle}`);
+    }
+  } catch (err) {
+    console.warn('[performances]', err);
+  }
+}
+
+/* YouTube titles carry a lot of shouting. Keep the name of the night. */
+function trimTitle(title) {
+  return String(title)
+    .replace(/\s*[([][^)\]]*\b(official|hd|4k|full|remaster\w*)\b[^)\]]*[)\]]\s*/gi, ' ')
+    .replace(/\s*\|\s*[^|]*$/, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+    .slice(0, 70);
 }
 
 /**
@@ -930,6 +1008,9 @@ async function checkListening(node) {
 async function maybeProfile(node, onProgress) {
   if (node.profile || node.profileTried || !hasLlm()) return;
   if (sentenceCount(node.bio?.extract) >= 5) return;
+  // A performance already carries its note on the edge that found it, and
+  // a model asked to write six sentences about one video will reach.
+  if (node.kind === 'live') return;
 
   node.profileTried = true;
   onProgress('reading up on it…');

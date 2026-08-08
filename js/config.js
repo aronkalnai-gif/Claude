@@ -12,10 +12,12 @@ const DEFAULTS = {
   lastfmKey: '',
   discogsToken: '',
   anthropicKey: '',
+  youtubeKey: '',
   anthropicModel: 'claude-opus-5',
   useLastfm: true,
   useDiscogs: true,
   useLlm: true,
+  useYouTube: true,
   useCoverArt: true,
   contactEmail: '',       // sent to MusicBrainz as a courtesy identifier
 };
@@ -40,3 +42,4 @@ export function saveSettings(patch) {
 export const hasLastfm  = () => { const s = settings(); return s.useLastfm  && !!s.lastfmKey; };
 export const hasDiscogs = () => { const s = settings(); return s.useDiscogs && !!s.discogsToken; };
 export const hasLlm     = () => { const s = settings(); return s.useLlm     && !!s.anthropicKey; };
+export const hasYouTube = () => { const s = settings(); return s.useYouTube && !!s.youtubeKey; };

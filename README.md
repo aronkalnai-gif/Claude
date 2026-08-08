@@ -60,7 +60,8 @@ is fully usable the moment you open it; the optional keys each add a distinct
 | **Cover Art Archive** | — | Sleeve art on album and single nodes. |
 | **Last.fm** | free key | An artist's most-played songs, which is a better answer to "what are they known for" than whatever happened to get pressed as a single; and tags that fill in a style for artists MusicBrainz hasn't tagged yet. [Get a key](https://www.last.fm/api/account/create) |
 | **Discogs** | free token | Session personnel: the sidemen and engineers on older records, where MusicBrainz often thins out. [Generate a token](https://www.discogs.com/settings/developers) |
-| **Claude** | API key | Two jobs. It turns each structured relationship into a sentence of real context, and it writes the five-or-six-sentence entry for the songs, studios and small labels Wikipedia has no article for — which is most songs. Grounded in the facts it's given, and instructed to write less rather than invent. [Console](https://console.anthropic.com/settings/keys) |
+| **YouTube** | free key | Concert footage, from the artist's own channel or from a festival or broadcaster — never a fan recording. One search per artist, so a free key's daily quota covers about a hundred of them. [Enable it](https://console.cloud.google.com/apis/library/youtube.googleapis.com) |
+| **Claude** | API key | Three jobs. It turns each structured relationship into a sentence of real context, and it writes the five-or-six-sentence entry for the songs, studios and small labels Wikipedia has no article for — which is most songs. And it decides which of the concert videos above are performances anyone remembers. Grounded in the facts it's given, and instructed to write less rather than invent. [Console](https://console.anthropic.com/settings/keys) |
 
 ### About the keys
 
@@ -127,6 +128,26 @@ looser and fainter edge so they never look like a band tie, and the noun
 for what the credit makes the person — which is also how the app knows
 that someone with no music of their own gets no Apple Music, Spotify or
 YouTube links. Three dead searches are worse than none.
+
+**Concert footage is refused unless we can name who filmed it.** YouTube's
+answer to "artist live" is mostly phone footage, and the fix isn't ranking
+it better — it's throwing away everything whose source can't be identified.
+A video survives only if it comes from the artist's own channel, resolved
+from the link MusicBrainz already stores rather than from a channel that
+merely has the right name, or from a festival or broadcaster on a curated
+list matched on the exact channel title. A substring rule would admit
+"Glastonbury Highlights 2011", which is the fan upload this is meant to
+exclude. It then has to look like a performance rather than a trailer or an
+interview, and run longer than four minutes.
+
+What survives that is a real concert, and most real concerts are merely
+competent. Which of them are *legendary* is a judgement, not a fact, so it
+is made by Claude — given the titles, channels, dates and view counts, told
+that fame of the song is not enough, and told that returning nothing is the
+normal answer. With no Claude key it falls back to reach, which is a blunt
+instrument and labelled as one. The test that matters most here is the one
+asserting the fan upload is refused **despite having more views than
+anything else in the pool**.
 
 **Placeholders are refused at the door.** MusicBrainz keeps special-purpose
 entities that stand in for the *absence* of an artist — a compilation is

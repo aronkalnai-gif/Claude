@@ -148,6 +148,8 @@ export function externalUrls(entity) {
     if (rel.type === 'wikidata' || /wikidata\.org/.test(res)) out.wikidata = res;
     else if (rel.type === 'wikipedia' || /wikipedia\.org/.test(res)) out.wikipedia = res;
     else if (/discogs\.com/.test(res)) out.discogs = res;
+    // Their own channel, which is what makes a concert video trustworthy.
+    else if (/youtube\.com\/(channel|user|c)\/|youtube\.com\/@/.test(res)) out.youtube = res;
     else if (rel.type === 'official homepage') out.homepage = res;
   }
   return out;

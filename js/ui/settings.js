@@ -11,6 +11,7 @@ import { loadImage } from '../sources/coverart.js';
 import * as lastfm from '../sources/lastfm.js';
 import * as discogs from '../sources/discogs.js';
 import * as llm from '../sources/llm.js';
+import * as youtube from '../sources/youtube.js';
 
 export function createModal(root, titleEl, bodyEl, closeBtn) {
   closeBtn.addEventListener('click', hide);
@@ -62,6 +63,17 @@ export function createModal(root, titleEl, bodyEl, closeBtn) {
       </div>
 
       <div class="field">
+        <label for="f-youtube">YouTube Data API key</label>
+        <span class="hint">Adds concert footage — but only from the artist's own
+          channel or a festival or broadcaster, never a fan recording. Add the
+          Anthropic key below too and it picks the performances worth watching
+          rather than the ones with the most views.
+          <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">Enable it free ↗</a></span>
+        <input id="f-youtube" type="password" autocomplete="off" spellcheck="false"
+          value="${esc(s.youtubeKey)}" placeholder="AIza…">
+      </div>
+
+      <div class="field">
         <label for="f-anthropic">Anthropic API key</label>
         <span class="hint">Writes a sentence of real context for each
           connection, and a short entry for the songs, studios and small
@@ -86,6 +98,7 @@ export function createModal(root, titleEl, bodyEl, closeBtn) {
         ${toggle('useLastfm', 'Last.fm songs & tags', s.useLastfm)}
         ${toggle('useDiscogs', 'Discogs credits', s.useDiscogs)}
         ${toggle('useLlm', 'Written context', s.useLlm)}
+        ${toggle('useYouTube', 'Concert footage', s.useYouTube)}
         ${toggle('useCoverArt', 'Cover art', s.useCoverArt)}
       </div>
 
@@ -103,10 +116,12 @@ export function createModal(root, titleEl, bodyEl, closeBtn) {
         lastfmKey: val('#f-lastfm'),
         discogsToken: val('#f-discogs'),
         anthropicKey: val('#f-anthropic'),
+        youtubeKey: val('#f-youtube'),
         anthropicModel: val('#f-model'),
         useLastfm: checked('useLastfm'),
         useDiscogs: checked('useDiscogs'),
         useLlm: checked('useLlm'),
+        useYouTube: checked('useYouTube'),
         useCoverArt: checked('useCoverArt'),
       });
       hide();
@@ -253,6 +268,11 @@ export function createModal(root, titleEl, bodyEl, closeBtn) {
         name: 'Discogs — credits',
         skip: !s.discogsToken ? 'no token set' : (!s.useDiscogs ? 'switched off in settings' : null),
         run: discogs.ping,
+      },
+      {
+        name: 'YouTube — concert footage',
+        skip: !s.youtubeKey ? 'no key set' : (!s.useYouTube ? 'switched off in settings' : null),
+        run: youtube.ping,
       },
       {
         name: `Anthropic — ${s.anthropicModel}`,

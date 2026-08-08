@@ -135,7 +135,7 @@ export function createPanel(el, body, { onExpand, onSelect, onClose }) {
     if (!links.length) return '';
 
     return `<section>
-      <h4>Listen</h4>
+      <h4>${n.kind === 'live' ? 'Watch' : 'Listen'}</h4>
       <div class="listen">
         ${links.map(l => `<a class="${l.direct ? 'direct' : ''}" href="${esc(l.url)}"
              target="_blank" rel="noopener"${l.direct ? ' title="Linked from MusicBrainz"' : ''}

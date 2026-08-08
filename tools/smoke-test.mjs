@@ -174,6 +174,40 @@ const fixtures = [
         release: { id: REL_ID, title: 'Proof of Concept' } },
     ],
   }],
+  // Nobody has filmed the session drummer's own gigs. Ordered ahead of the
+  // general search fixture, which would otherwise answer for every artist.
+  [/youtube\/v3\/search.*q=Ada/, { pageInfo: { totalResults: 0 }, items: [] }],
+  [/youtube\/v3\/search.*q=Lens/, { pageInfo: { totalResults: 0 }, items: [] }],
+
+  /* Concert footage. The pool deliberately mixes what must be kept with
+     what must be thrown away: a fan recording with more views than any of
+     them, a trailer on a trusted channel, and a two-minute clip. */
+  [/youtube\/v3\/search/, {
+    pageInfo: { totalResults: 4 },
+    items: [
+      { id: { videoId: 'vidFAN' }, snippet: {
+        title: 'The Testers LIVE 1969 FULL CONCERT (amazing quality!!)',
+        channelTitle: 'RetroRockVault', channelId: 'UCfan', publishedAt: '2014-03-02T00:00:00Z' } },
+      { id: { videoId: 'vidGLAST' }, snippet: {
+        title: 'The Testers - Full Set (Live at Glastonbury 1970)',
+        channelTitle: 'Glastonbury Festival', channelId: 'UCglasto', publishedAt: '2019-06-01T00:00:00Z' } },
+      { id: { videoId: 'vidTRAIL' }, snippet: {
+        title: 'Glastonbury 1970 — official aftermovie',
+        channelTitle: 'Glastonbury Festival', channelId: 'UCglasto', publishedAt: '2019-05-01T00:00:00Z' } },
+      { id: { videoId: 'vidCLIP' }, snippet: {
+        title: 'The Testers live at KEXP — one song',
+        channelTitle: 'KEXP', channelId: 'UCkexp', publishedAt: '2018-01-01T00:00:00Z' } },
+    ],
+  }],
+  [/youtube\/v3\/videos/, {
+    items: [
+      { id: 'vidFAN',   contentDetails: { duration: 'PT52M10S' }, statistics: { viewCount: '9000000' } },
+      { id: 'vidGLAST', contentDetails: { duration: 'PT48M30S' }, statistics: { viewCount: '2400000' } },
+      { id: 'vidTRAIL', contentDetails: { duration: 'PT9M02S' },  statistics: { viewCount: '1500000' } },
+      { id: 'vidCLIP',  contentDetails: { duration: 'PT3M40S' },  statistics: { viewCount: '5000000' } },
+    ],
+  }],
+
   // The listening check itself. Nothing is credited to the photographer;
   // Ada Fixture played on records without releasing any of her own.
   [new RegExp(`ws/2/recording\\?.*artist=${SHOOTER}`), { 'recording-count': 0, recordings: [] }],
@@ -223,6 +257,14 @@ const base = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1024, height: 768 } });
 
+/* A YouTube key, so the concert path runs. Deliberately no Anthropic key:
+   everything here has to hold up with the model layer switched off, which
+   also means the performance picks fall back to reach rather than
+   judgement — the harder case to get right. */
+await page.addInitScript(() => {
+  localStorage.setItem('odyssey.settings.v1', JSON.stringify({ youtubeKey: 'test-key' }));
+});
+
 const errors = [];
 page.on('console', m => {
   if (m.type() !== 'error') return;
@@ -270,7 +312,10 @@ async function waitFor(label, predicate, timeout = 45000) {
 const state = () => page.evaluate(async () => {
   const m = await import('./js/state.js');
   return {
-    nodes: m.nodeList().map(n => ({ id: n.id, kind: n.kind, label: n.label, sublabel: n.sublabel, expanded: n.expanded })),
+    nodes: m.nodeList().map(n => ({
+      id: n.id, kind: n.kind, label: n.label, sublabel: n.sublabel,
+      expanded: n.expanded, watchUrl: n.watchUrl,
+    })),
     edges: m.edgeList().map(e => ({ kind: e.kind, label: e.label, a: e.a, b: e.b })),
     selected: m.graph.selectedId,
   };
@@ -337,6 +382,20 @@ try {
     s.nodes.find(n => n.label === 'Fixture Drift')?.sublabel);
   check('a style match by the artist themselves is not offered as a stranger',
     !s.nodes.some(n => n.label === 'Own Work'));
+
+  // Concert footage: what gets in matters far less than what doesn't.
+  const shows = s.nodes.filter(n => n.kind === 'live');
+  check('a concert from a festival channel is offered',
+    shows.some(n => /Glastonbury/.test(n.sublabel || '')),
+    shows.map(n => `${n.label} (${n.sublabel})`).join(' / ') || 'none');
+  check('the fan upload is refused despite having the most views',
+    !shows.some(n => /RetroRockVault/.test(n.sublabel || '')));
+  check('a trailer on a trusted channel is not mistaken for a set',
+    !shows.some(n => /aftermovie/i.test(n.label)));
+  check('a three-minute clip is not a concert',
+    !shows.some(n => /one song/i.test(n.label)));
+  check('the performance links straight to the video',
+    shows.every(n => /youtube\.com\/watch\?v=/.test(n.watchUrl || '')));
 
   // MusicBrainz placeholders. Left alone they connect everything to
   // everything: Various Artists alone stands in for hundreds of thousands

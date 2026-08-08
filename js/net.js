@@ -15,6 +15,7 @@ const HOST_RULES = [
   { match: /audioscrobbler\.com/,    minGap: 220,  label: 'Last.fm' },
   { match: /api\.discogs\.com/,      minGap: 1100, label: 'Discogs' },
   { match: /wikipedia\.org|wikidata/, minGap: 120, label: 'Wikipedia' },
+  { match: /googleapis\.com\/youtube/, minGap: 200, label: 'YouTube' },
   { match: /api\.anthropic\.com/,    minGap: 0,    label: 'Anthropic' },
 ];
 

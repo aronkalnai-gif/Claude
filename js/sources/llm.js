@@ -203,6 +203,97 @@ export async function profile(subject, facts = [], known = '', connections = [])
   }
 }
 
+/* ── Performances ───────────────────────────────────────────────────── */
+
+/* YouTube can tell us a video is a real concert from a channel we trust.
+   It cannot tell us the performance mattered, and view count is a poor
+   stand-in — it measures how famous the song is, not how good the night
+   was. That judgement is this prompt's whole job, and the instruction that
+   does the work is the one telling it to return nothing. Most artists have
+   no legendary performance on YouTube, and an empty list is the correct
+   answer far more often than not. */
+const SHOWS_SYSTEM = `You are given concert videos of one artist, all from the artist's own channel or from a festival or broadcaster. Pick only the performances that are genuinely notable.
+
+A performance qualifies if it is one people actually talk about: a festival set remembered as a career peak, a historic broadcast, a session that became the definitive version of a song, a reunion or a final show. Fame of the *song* is not enough. A competent set at a big festival is not enough. If nothing on the list clears that bar, return an empty list — that is the normal outcome and it is not a failure.
+
+Return at most 3, best first. For each, write one sentence saying what makes that particular night worth watching: what happened, when, why it is remembered. Ground it in the video's title, channel and date plus performance history you are confident about. Never invent an anecdote, a date or a detail. If you know the video is notable but cannot say why without guessing, leave it out.
+
+No preamble, no hedging, no exclamation marks.`;
+
+const SHOWS_SCHEMA = {
+  type: 'object',
+  properties: {
+    picks: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id:   { type: 'string', description: 'The exact video id given.' },
+          note: { type: 'string', description: 'One sentence on why this performance is remembered.' },
+        },
+        required: ['id', 'note'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['picks'],
+  additionalProperties: false,
+};
+
+/**
+ * @param {string} artist
+ * @param {Array<{id,title,channelTitle,published,views,seconds}>} videos
+ * @returns {Promise<Array<{id: string, note: string}>>}
+ */
+export async function curatePerformances(artist, videos) {
+  if (!hasLlm() || !videos?.length) return [];
+
+  const model = settings().anthropicModel || 'claude-opus-5';
+  const lines = videos.map(v =>
+    `- id: ${v.id}\n  "${v.title}" — ${v.channelTitle}` +
+    `${v.published ? `, ${String(v.published).slice(0, 10)}` : ''}` +
+    `${v.seconds ? `, ${Math.round(v.seconds / 60)} min` : ''}` +
+    `${v.views ? `, ${v.views.toLocaleString('en')} views` : ''}`);
+
+  const body = {
+    model,
+    max_tokens: 1200,
+    system: SHOWS_SYSTEM,
+    output_config: { format: { type: 'json_schema', schema: SHOWS_SCHEMA } },
+    messages: [{
+      role: 'user',
+      content: `Artist: ${artist}\n\nCandidate videos:\n${lines.join('\n')}\n\nWhich of these are legendary performances?`,
+    }],
+  };
+
+  if (SUPPORTS_EFFORT.test(model)) {
+    body.thinking = { type: 'disabled' };
+    body.output_config.effort = 'low';
+  }
+
+  const res = await postJSON(ENDPOINT, body, {
+    headers: {
+      'x-api-key': settings().anthropicKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+  });
+
+  if (res.stop_reason === 'refusal') return [];
+  const text = (res.content || []).find(b => b.type === 'text')?.text;
+  if (!text) return [];
+
+  try {
+    const picks = JSON.parse(text).picks || [];
+    const known = new Set(videos.map(v => v.id));
+    return picks
+      .filter(p => p?.id && p?.note && known.has(p.id))   // no invented ids
+      .slice(0, 3);
+  } catch {
+    return [];
+  }
+}
+
 /** Used by the diagnostics panel. */
 export async function ping() {
   const notes = await annotate(
