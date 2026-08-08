@@ -17,10 +17,15 @@ saved to an iPad home screen and used like a native app.
 **1. Put it online.** Anywhere that serves static files works. The repo ships a
 GitHub Pages workflow, so the simplest path is:
 
-- Push this branch and merge it to your default branch
-- Repo → **Settings → Pages → Source: GitHub Actions**
-- The workflow publishes on every push; your URL will be
+- Repo → **Settings → Pages → Source: GitHub Actions**. This is the one step
+  that can't be done from a commit, and it only needs doing once.
+- Push to the default branch. The workflow publishes on every such push —
+  it reads the default branch's name rather than assuming `main`, so it
+  works whatever yours is called.
+- Watch it under the **Actions** tab; your URL will be
   `https://<your-username>.github.io/<repo>/`
+
+Every path in the app is relative, so serving it from a repo subpath is fine.
 
 It must be served over **https** (or `localhost`). Service workers, and
 several of the APIs, refuse to run otherwise.

@@ -2,7 +2,6 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main, master]
   workflow_dispatch:
 
 permissions:
@@ -17,6 +16,10 @@ concurrency:
 
 jobs:
   deploy:
+    # Publish whatever the repository's default branch happens to be called,
+    # rather than assuming it's `main`. This repo's default is the working
+    # branch, so a hard-coded [main, master] filter would never fire.
+    if: github.ref_name == github.event.repository.default_branch
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
