@@ -115,6 +115,19 @@ whatever it managed to gather.
 "sounds a bit like" tie floats out at the edge. The strength of a relationship
 is something you can read at a glance without touching anything.
 
+**Not everyone on a record played on it.** MusicBrainz files the sleeve
+photographer on the same relationship tables as the bass player, so a
+graph that doesn't name the relation implies they did the same kind of
+thing. Stéphane Sednaoui shot Björk's covers and directed her videos and
+has never played a note on one; "related to Björk" invites exactly the
+wrong conclusion. Photography, artwork, art direction, video, liner notes
+and the rest each carry the sentence that states the credit outright
+("photographed", and "was photographed by" read from the other end), a
+looser and fainter edge so they never look like a band tie, and the noun
+for what the credit makes the person — which is also how the app knows
+that someone with no music of their own gets no Apple Music, Spotify or
+YouTube links. Three dead searches are worse than none.
+
 **Placeholders are refused at the door.** MusicBrainz keeps special-purpose
 entities that stand in for the *absence* of an artist — a compilation is
 credited to Various Artists, an untitled field recording to `[unknown]`, a

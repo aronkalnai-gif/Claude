@@ -11,7 +11,7 @@ import { summaryFor, sentenceCount } from './sources/wikipedia.js';
 import { releaseGroupArt, releaseArt, loadImage } from './sources/coverart.js';
 import { annotate, profile } from './sources/llm.js';
 import { addNode as storeNode, addEdge, graph, nodeId, emit, findByLabel } from './state.js';
-import { describeRelation, artistKind, kindLabel, isPlaceholder } from './model.js';
+import { describeRelation, artistKind, kindLabel, isPlaceholder, NON_MUSICAL } from './model.js';
 import { factLines } from './facts.js';
 import { hasLastfm, hasDiscogs, hasLlm, settings } from './config.js';
 
@@ -769,7 +769,8 @@ function linkArtistRelations(ctx, entity) {
 function linkRelation(ctx, current, other, rel, extra = null) {
   const forward = rel.direction !== 'backward';
   const phrase = describeRelation(rel);
-  const kind = REL_EDGE_KIND[rel.type] || 'related';
+  const kind = NON_MUSICAL[rel.type] ? 'offstage' : (REL_EDGE_KIND[rel.type] || 'related');
+  noteRole(forward ? current : other, forward ? other : current, rel);
   const a = forward ? current.id : other.id;
   const b = forward ? other.id : current.id;
   const edge = addEdge(a, b, kind, phrase);
@@ -789,6 +790,27 @@ function record(ctx, edge, other, extra, relationOverride) {
     relation: relationOverride || edge.label || edge.kind,
     extra: extra || undefined,
   });
+}
+
+/**
+ * Note what a credit makes someone.
+ *
+ * Only the *subject* of a non-musical relation earns the role: on "Sednaoui
+ * photographed Björk" he is the photographer and she is not. Everything
+ * else is treated as musical, which is the safe way round — a wrong guess
+ * here only ever costs a set of search links that lead nowhere.
+ */
+function noteRole(subject, object, rel) {
+  const artistic = n => n && /^(person|group|artist)$/.test(n.kind);
+  const credit = NON_MUSICAL[rel.type];
+
+  if (!credit) {
+    for (const n of [subject, object]) if (artistic(n)) n.musical = true;
+    return;
+  }
+  if (!artistic(subject) || subject.role) return;
+  subject.role = credit.role;
+  if (!subject.sublabel) subject.sublabel = credit.role;
 }
 
 /** Fetch a Wikipedia blurb in the background; never blocks the graph. */

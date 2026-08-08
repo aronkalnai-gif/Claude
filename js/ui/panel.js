@@ -5,7 +5,7 @@
    sits above the biography, not below it. */
 
 import { graph, neighbours } from '../state.js';
-import { kindColor, kindLabel, listenLinks } from '../model.js';
+import { kindColor, kindLabel, listenLinks, canListen, NON_MUSICAL } from '../model.js';
 import { firstSentences } from '../sources/wikipedia.js';
 import { factsFor } from '../facts.js';
 
@@ -115,12 +115,13 @@ export function createPanel(el, body, { onExpand, onSelect, onClose }) {
       ${sessionNotes}
       ${tags}
 
+      ${canListen(n) ? `
       <section>
         <h4>Listen</h4>
         <div class="listen">
           ${listenLinks(n).map(l => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)} ↗</a>`).join('')}
         </div>
-      </section>
+      </section>` : ''}
     `;
   }
 
@@ -193,7 +194,7 @@ export function createPanel(el, body, { onExpand, onSelect, onClose }) {
 /* Strongest ties first — that's the order someone reads them in anyway. */
 const ORDER = ['member', 'founded', 'collab', 'credit', 'produced', 'performed',
                'released', 'track', 'recordedAt', 'onLabel', 'wroteWork', 'otherTake',
-               'related', 'style'];
+               'related', 'offstage', 'style'];
 const rank = k => { const i = ORDER.indexOf(k); return i < 0 ? 99 : i; };
 
 /* Turn "played bass in · 1971 – 1978" into something that still reads
@@ -202,6 +203,10 @@ function invert(label) {
   const [phrase, ...rest] = String(label).split(' · ');
   const tail = rest.length ? ` · ${rest.join(' · ')}` : '';
   const map = {
+    // "photographed" → "was photographed by", and the rest of the offstage
+    // credits, taken from the same table that phrased them in the first
+    // place so the two directions can't drift apart.
+    ...Object.fromEntries(Object.values(NON_MUSICAL).map(c => [c.verb, c.inverse])),
     'was a member of': 'counts among its members',
     'released': 'was released by',
     'produced': 'was produced by',

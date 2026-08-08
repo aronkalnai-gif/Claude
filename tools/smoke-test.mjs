@@ -55,6 +55,8 @@ const UNKNOWN   = '125ec42a-7229-4250-afc5-e057484327fe';
 const DISNEY    = 'cccccccc-0000-0000-0000-00000000000d';
 // And the counter-example: a real band whose name is in brackets.
 const SPUNGE    = 'cccccccc-0000-0000-0000-00000000000e';
+// The sleeve photographer — real credit, no music of his own.
+const SHOOTER   = 'cccccccc-0000-0000-0000-00000000000f';
 
 const fixtures = [
   // Songs in a style, by strangers. Includes one recording by the seed band
@@ -156,6 +158,17 @@ const fixtures = [
         place: { id: PLACE_ID, name: 'Regression Studios', type: 'Studio', area: { name: 'London' } } },
       { type: 'producer', direction: 'backward', 'target-type': 'artist',
         artist: { id: ARTIST_ID, name: 'Ada Fixture', type: 'Person' } },
+      // The Sednaoui case: credited on the record, not a musician.
+      { type: 'photography', direction: 'backward', 'target-type': 'artist',
+        artist: { id: SHOOTER, name: 'Lens Cap', type: 'Person' } },
+    ],
+  }],
+  [new RegExp(`ws/2/artist/${SHOOTER}`), {
+    id: SHOOTER, name: 'Lens Cap', type: 'Person', area: { name: 'Paris' },
+    tags: [], 'release-groups': [],
+    relations: [
+      { type: 'photography', direction: 'forward', 'target-type': 'release',
+        release: { id: REL_ID, title: 'Proof of Concept' } },
     ],
   }],
   [/ws\/2\/release\?label=/, { releases: [] }],
@@ -420,6 +433,48 @@ try {
     await detail(person);
     return { rows: factsFor(person), label: person.label };
   });
+  // Non-musical credits. The relation has to name itself, and the person
+  // must not be offered three search links that lead nowhere.
+  const crew = await page.evaluate(async () => {
+    const m = await import('./js/state.js');
+    const { detail } = await import('./js/expand.js');
+    const { canListen } = await import('./js/model.js');
+    const { createPanel } = await import('./js/ui/panel.js');
+    const shooter = [...m.graph.nodes.values()].find(n => n.label === 'Lens Cap');
+    if (!shooter) return { missing: true };
+    await detail(shooter);
+
+    const el = document.getElementById('sheet'), body = document.getElementById('sheet-body');
+    const p = createPanel(el, body, {});
+    p.show(shooter);
+    const own = body.innerHTML;
+
+    // And the same edge read from the record's side.
+    const album = [...m.graph.nodes.values()].find(n => n.label === 'Proof of Concept');
+    p.show(album);
+    const fromAlbum = body.innerHTML;
+
+    return {
+      role: shooter.role,
+      sublabel: shooter.sublabel,
+      listen: canListen(shooter),
+      albumListens: canListen(album),
+      edge: [...m.graph.edges.values()].find(e => e.kind === 'offstage')?.label,
+      own, fromAlbum,
+    };
+  });
+
+  check('a non-musical credit says what it was',
+    crew.edge === 'photographed', crew.edge || 'no offstage edge');
+  check('and it reads correctly from the other end',
+    /was photographed by/.test(crew.fromAlbum || ''),
+    (crew.fromAlbum?.match(/was photographed by[^<]*/) || ['not found'])[0]);
+  check('the person is labelled by what they actually did',
+    crew.role === 'photographer' && crew.sublabel === 'photographer', crew.sublabel);
+  check('someone with no music of their own is offered nowhere to listen',
+    crew.listen === false && !/music\.apple\.com/.test(crew.own || ''));
+  check('while a record still is', crew.albumListens === true);
+
   // A node with nothing behind it must stop offering a button that does
   // nothing. Ada Fixture's lookup has no relations and no releases.
   const dead = await page.evaluate(async () => {

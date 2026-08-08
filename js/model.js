@@ -49,6 +49,9 @@ export const EDGE = {
   otherTake:   { weight: 0.55, color: '#7A4C6B', dash: [2, 5] },
   collab:      { weight: 0.70, color: '#C4603F', dash: null },
   related:     { weight: 0.50, color: '#8A8370', dash: [2, 5] },
+  // Sleeve, photography, video: real work on the record, none of it played.
+  // Drawn loose and faint so it never reads as a band tie.
+  offstage:    { weight: 0.45, color: '#9A8C74', dash: [1, 4] },
   style:       { weight: 0.40, color: '#8A7B5E', dash: [3, 4] },
 };
 
@@ -77,6 +80,64 @@ export function fmtRange(begin, end, ended) {
 /* Turn a MusicBrainz relation into readable prose. Returns the phrase
    without the other party's name — the caller supplies that, so the name
    can be a tappable link. */
+/* Credits that aren't music.
+
+   MusicBrainz files the sleeve photographer on the same relationship tables
+   as the bass player, and until you name the relation the graph implies
+   they did the same kind of thing. Stéphane Sednaoui shot Björk's covers
+   and directed her videos; he has never played on a record, and a node that
+   says only "related to Björk" invites exactly the wrong conclusion.
+
+   So each of these carries the sentence that states the credit outright,
+   the sentence for reading it from the other end, and the noun for what
+   that makes the person — which is also how the app knows not to offer you
+   somewhere to go and listen to them. */
+export const NON_MUSICAL = {
+  'photography':          { verb: 'photographed',              inverse: 'was photographed by',          role: 'photographer' },
+  'design/illustration':  { verb: 'designed the artwork for',  inverse: 'had its artwork designed by',  role: 'designer' },
+  'graphic design':       { verb: 'designed the sleeve for',   inverse: 'had its sleeve designed by',   role: 'graphic designer' },
+  'illustration':         { verb: 'illustrated',               inverse: 'was illustrated by',           role: 'illustrator' },
+  'art direction':        { verb: 'art-directed',              inverse: 'was art-directed by',          role: 'art director' },
+  'creative direction':   { verb: 'was creative director for', inverse: 'had creative direction by',    role: 'creative director' },
+  'video director':       { verb: 'directed the video for',    inverse: 'had its video directed by',    role: 'video director' },
+  'videographer':         { verb: 'shot video for',            inverse: 'had video shot by',            role: 'videographer' },
+  'liner notes':          { verb: 'wrote the liner notes for', inverse: 'has liner notes by',           role: 'writer' },
+  'booking':              { verb: 'booked shows for',          inverse: 'was booked by',                role: 'booking agent' },
+  'legal representation': { verb: 'represented',               inverse: 'was represented by',           role: 'lawyer' },
+  'personal assistant':   { verb: 'assisted',                  inverse: 'was assisted by',              role: 'assistant' },
+  'translator':           { verb: 'translated for',            inverse: 'was translated by',            role: 'translator' },
+  'publishing':           { verb: 'published',                 inverse: 'was published by',             role: 'publisher' },
+  'misc':                 { verb: 'worked with',               inverse: 'worked with',                  role: 'collaborator' },
+};
+
+const ARTISTIC = new Set(['person', 'group', 'artist']);
+
+/**
+ * Is there anything here to go and listen to?
+ *
+ * A photographer, a sleeve designer, a recording studio: real nodes, worth
+ * opening, with nothing on Spotify under that name. Three dead search
+ * links are worse than no links, so the section comes off entirely.
+ */
+export function canListen(node) {
+  if (!node) return false;
+  if (node.kind === 'place') return false;
+  if (!ARTISTIC.has(node.kind)) return true;      // records, songs, works, labels
+  if (node.musical) return true;                   // seen in a musical credit
+
+  // Their own lookup settles it: anything released under their name, or any
+  // credit that isn't one of the above, means there's music to find.
+  if (node.data) {
+    if ((node.data['release-groups'] || []).length) return true;
+    return (node.data.relations || []).some(r =>
+      r['target-type'] !== 'url' && !NON_MUSICAL[r.type]);
+  }
+
+  // Nothing looked up yet: only suppress if the credit that brought them in
+  // was itself non-musical.
+  return !node.role;
+}
+
 export function describeRelation(rel, { asSubject = true } = {}) {
   const type = rel.type || '';
   const attrs = (rel.attributes || []).filter(a => a !== 'original');
@@ -93,6 +154,9 @@ export function describeRelation(rel, { asSubject = true } = {}) {
   const instruments = attrs.filter(a => !/^(guest|additional|original|founder|lead|solo)$/i.test(a));
   const roleWord = instruments.length ? instruments.join(', ') : null;
   const founder = (rel.attributes || []).some(a => /founder/i.test(a));
+
+  const offstage = NON_MUSICAL[type];
+  if (offstage) return range ? `${offstage.verb} · ${range}` : offstage.verb;
 
   let phrase;
   switch (type) {
@@ -133,7 +197,10 @@ export function describeRelation(rel, { asSubject = true } = {}) {
     case 'recorded in':        phrase = 'was recorded in'; break;
     case 'mixed at':           phrase = 'was mixed at'; break;
     case 'engineered at':      phrase = 'was engineered at'; break;
-    default:                   phrase = type || 'is connected to';
+    // MusicBrainz has a long tail of relation types. A bare slug —
+    // "phonographic copyright Sire Records" — reads like a database dump;
+    // naming it as a credit at least makes it a sentence.
+    default:                   phrase = type ? `is credited for ${type} on` : 'is connected to';
   }
   return range ? `${phrase} · ${range}` : phrase;
 }
