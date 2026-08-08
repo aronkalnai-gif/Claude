@@ -42,14 +42,24 @@
 <!-- ── Launch screen ─────────────────────────────────────────────────── -->
 <section class="launch" id="launch">
   <div class="launch-inner">
+    <!-- The ship of icons/icon.svg, redrawn for 40px and a single colour:
+         the eye, the wale and the brailing lines all close up at this size,
+         so what's left is the silhouette that still says Greek galley —
+         crescent hull, square sail, curled stern. -->
     <svg class="launch-mark" viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="3.1" fill="currentColor"/>
-      <circle cx="12" cy="3.2" r="1.5" fill="currentColor"/>
-      <circle cx="20.8" cy="12" r="1.5" fill="currentColor"/>
-      <circle cx="12" cy="20.8" r="1.5" fill="currentColor"/>
-      <circle cx="3.2" cy="12" r="1.5" fill="currentColor"/>
-      <g stroke="currentColor" stroke-width="0.9" opacity=".55">
-        <path d="M12 4.7v4.2M12 15.1v4.2M4.7 12h4.2M15.1 12h4.2"/>
+      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4.6 21.4Q12 22.2 19.4 21.2" stroke-width=".8" opacity=".45"/>
+        <g stroke-width=".85">
+          <path d="M7.6 17 5.6 19.8M10.6 17.6 8.6 20.4M13.6 17.6 11.6 20.4M16.4 17 14.4 19.8"/>
+        </g>
+        <path d="M19.2 14.8q2.2-2.2.7-4.2-.7-.9-1.8-.4" stroke-width="1.1"/>
+        <path d="M11.6 3.4v12" stroke-width=".95"/>
+        <path d="M6.2 7 17.4 6.5" stroke-width=".95"/>
+      </g>
+      <g fill="currentColor">
+        <path d="M6.9 7.2q5-.3 10-.6.7 2.8-.3 5.8-4.8 1-9.4.2-.9-2.8-.3-5.4z"/>
+        <path d="M3.4 15.4q7.7 1 16-.7-.3 2.9-3.1 4-2.7 1.1-6.7.4-4-.7-6.2-3.7z"/>
+        <path d="M12.1 3.6 15.4 4.4 12.1 5.2z"/>
       </g>
     </svg>
     <h1>Odyssey</h1>

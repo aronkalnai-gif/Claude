@@ -93,7 +93,8 @@ js/
   ui/settings.js         settings form + on-device diagnostics
   sources/*.js           one file per data source
 tools/
-  make-icons.mjs         regenerates the PNG icons (no image deps)
+  ship.mjs               the logo, as coordinates: Odysseus's galley
+  make-icons.mjs         draws ship.mjs to icons/*.png and icon.svg
   smoke-test.mjs         headless end-to-end test
 ```
 
@@ -155,8 +156,17 @@ would overlap something already placed is dropped.
 
 ```sh
 node tools/smoke-test.mjs     # end-to-end run in headless Chromium
-node tools/make-icons.mjs     # regenerate icons/*.png
+node tools/make-icons.mjs     # regenerate icons/ from tools/ship.mjs
 ```
+
+The icon is a Homeric galley — crescent hull, bronze ram, banked oars, one
+square sail, and the curled aphlaston stern. It lives in `tools/ship.mjs`
+as plain coordinates, and both the PNGs and `icon.svg` are drawn from that
+one description, so the home-screen icon and the favicon can't drift apart.
+Edit the ship by moving a number and re-running the command. The 40px mark
+on the launch screen is a separate, simplified drawing inlined in
+`index.html`: at that size the eye and the rigging close up, so it keeps
+only the silhouette.
 
 The smoke test serves the app, stubs every outbound API with fixtures, and
 drives a full session — search, seed, expand an album, open the sheet —

@@ -1,133 +1,189 @@
-/* Renders the app icon to PNG without any image dependencies.
+/* Renders the app icon from tools/ship.mjs — the PNGs iOS wants for the
+   home screen, and the SVG the browser uses as a favicon.
+
    Run with: node tools/make-icons.mjs
-   Kept in the repo so the icons can be regenerated rather than being
-   opaque binaries nobody can edit. */
+
+   Kept in the repo so the icons can be edited by moving a coordinate,
+   rather than being opaque binaries nobody can open. No dependencies:
+   the rasteriser and the PNG writer are both below. */
 
 import { deflateSync } from 'node:zlib';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { shapes, CLIPS, PALETTE } from './ship.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, '..', 'icons');
+const UNIT = 512;          // the space ship.mjs draws in
+const SS = 4;              // subsamples per axis
 
-/* The same constellation as icon.svg, in a 512-unit space. */
-const EDGES = [
-  [256, 250, 150, 158], [256, 250, 372, 170], [256, 250, 146, 352],
-  [256, 250, 370, 356], [150, 158, 372, 170], [146, 352, 370, 356],
-];
-const NODES = [
-  [256, 250, 40, [0xC4, 0x60, 0x3F]],   // rust — the seed
-  [150, 158, 24, [0xB4, 0x83, 0x2C]],   // ochre
-  [372, 170, 22, [0x3E, 0x6B, 0x80]],   // slate blue
-  [146, 352, 20, [0x4A, 0x7A, 0x4E]],   // forest
-  [370, 356, 26, [0x7A, 0x4C, 0x6B]],   // plum
-];
+/* ── Raster ─────────────────────────────────────────────────────────── */
 
+/* Supersampled painter's algorithm: every shape is a hard in/out test at
+   each subsample, and the antialiasing falls out of averaging the SS²
+   samples in a pixel. Slower than analytic coverage, but it handles
+   polygons, strokes, circles and clip paths with one code path — and it
+   runs at build time, so the only thing it costs is a second. */
 function render(size, { rounded = true } = {}) {
-  const s = size / 512;
-  const px = new Uint8Array(size * size * 4);
-
-  const put = (x, y, [r, g, b], a) => {
-    if (a <= 0) return;
-    const i = (y * size + x) * 4;
-    const inv = 1 - a;
-    px[i]     = px[i]     * inv + r * a;
-    px[i + 1] = px[i + 1] * inv + g * a;
-    px[i + 2] = px[i + 2] * inv + b * a;
-    px[i + 3] = Math.min(255, px[i + 3] * inv + 255 * a);
-  };
+  const s = size / UNIT;
+  const scene = shapes().map(sh => prepare(sh, s));
+  const px = new Uint8ClampedArray(size * size * 4);
 
   const cx = size / 2, cy = size * 0.42, maxR = size * 0.72;
-  const radius = size * 0.219;   // 112/512
+  const radius = size * 0.219;                          // 112/512
+  const top = rgb(PALETTE.paperTop), edge = rgb(PALETTE.paperEdge);
+  const step = 1 / SS, half = step / 2;
 
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      // Rounded-rect mask, antialiased at the corners.
-      let mask = 1;
-      if (rounded) mask = roundedRectCoverage(x + 0.5, y + 0.5, size, radius);
-      if (mask <= 0) continue;
+      let r = 0, g = 0, b = 0, a = 0;
 
-      // Warm paper, very slightly deeper towards the edges.
-      const t = Math.min(1, Math.hypot(x - cx, y - cy) / maxR);
-      const col = [
-        lerp(0xFB, 0xEE, t), lerp(0xF7, 0xE4, t), lerp(0xEC, 0xCF, t),
-      ];
-      put(x, y, col, mask);
+      for (let sy = 0; sy < SS; sy++) {
+        for (let sx = 0; sx < SS; sx++) {
+          const px1 = x + sx * step + half, py1 = y + sy * step + half;
+          if (rounded && outsideRounded(px1, py1, size, radius)) continue;
+
+          // Ground first: warm paper, a shade deeper towards the edge.
+          const t = Math.min(1, Math.hypot(px1 - cx, py1 - cy) / maxR);
+          let col = [
+            top[0] + (edge[0] - top[0]) * t,
+            top[1] + (edge[1] - top[1]) * t,
+            top[2] + (edge[2] - top[2]) * t,
+          ];
+          for (const sh of scene) if (hits(sh, px1, py1)) col = sh.rgb;
+
+          r += col[0]; g += col[1]; b += col[2]; a += 255;
+        }
+      }
+
+      const n = SS * SS, i = (y * size + x) * 4;
+      // Un-premultiply: the colour is the average over *covered* samples,
+      // while alpha is the coverage. Averaging over all SS² instead would
+      // darken every rounded corner towards black.
+      const cov = a / 255;
+      if (cov > 0) { px[i] = r / cov; px[i + 1] = g / cov; px[i + 2] = b / cov; }
+      px[i + 3] = a / n;
     }
   }
-
-  // Edges.
-  const lineW = 6 * s;
-  for (const [x1, y1, x2, y2] of EDGES) {
-    strokeSegment(px, size, x1 * s, y1 * s, x2 * s, y2 * s, lineW, [0xC0, 0xB0, 0x92], put, rounded, radius);
-  }
-
-  // Nodes.
-  for (const [x, y, r, col] of NODES) {
-    fillCircle(px, size, x * s, y * s, r * s, col, put, rounded, radius);
-  }
-
   return px;
 }
 
-const lerp = (a, b, t) => Math.round(a + (b - a) * t);
-
-function roundedRectCoverage(x, y, size, r) {
-  const dx = Math.max(r - x, x - (size - r), 0);
-  const dy = Math.max(r - y, y - (size - r), 0);
-  if (dx === 0 || dy === 0) return 1;
-  const d = Math.hypot(dx, dy);
-  return clamp01(r - d + 0.5);
-}
-
-function fillCircle(px, size, cx, cy, r, col, put, rounded, radius) {
-  const x0 = Math.max(0, Math.floor(cx - r - 1)), x1 = Math.min(size - 1, Math.ceil(cx + r + 1));
-  const y0 = Math.max(0, Math.floor(cy - r - 1)), y1 = Math.min(size - 1, Math.ceil(cy + r + 1));
-  for (let y = y0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++) {
-      const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
-      let a = clamp01(r - d + 0.5);
-      if (rounded) a *= roundedRectCoverage(x + 0.5, y + 0.5, size, radius);
-      put(x, y, col, a);
-    }
+function prepare(sh, s) {
+  const out = { ...sh, rgb: rgb(sh.fill || sh.color) };
+  if (sh.kind === 'circle') {
+    out.c = [sh.c[0] * s, sh.c[1] * s];
+    out.r = sh.r * s;
+    out.bbox = [out.c[0] - out.r, out.c[1] - out.r, out.c[0] + out.r, out.c[1] + out.r];
+  } else {
+    out.pts = sh.pts.map(([x, y]) => [x * s, y * s]);
+    const pad = sh.kind === 'stroke' ? (sh.width * s) / 2 + 1 : 1;
+    out.bbox = bbox(out.pts, pad);
+    if (sh.kind === 'stroke') out.half = (sh.width * s) / 2;
+    if (sh.clip) out.clipPts = CLIPS[sh.clip].map(([x, y]) => [x * s, y * s]);
   }
+  return out;
 }
 
-function strokeSegment(px, size, x1, y1, x2, y2, w, col, put, rounded, radius) {
-  const half = w / 2;
-  const x0 = Math.max(0, Math.floor(Math.min(x1, x2) - half - 1));
-  const xe = Math.min(size - 1, Math.ceil(Math.max(x1, x2) + half + 1));
-  const y0 = Math.max(0, Math.floor(Math.min(y1, y2) - half - 1));
-  const ye = Math.min(size - 1, Math.ceil(Math.max(y1, y2) + half + 1));
-  for (let y = y0; y <= ye; y++) {
-    for (let x = x0; x <= xe; x++) {
-      const d = distToSegment(x + 0.5, y + 0.5, x1, y1, x2, y2);
-      let a = clamp01(half - d + 0.5) * 0.95;
-      if (rounded) a *= roundedRectCoverage(x + 0.5, y + 0.5, size, radius);
-      put(x, y, col, a);
-    }
+function hits(sh, x, y) {
+  const [x0, y0, x1, y1] = sh.bbox;
+  if (x < x0 || x > x1 || y < y0 || y > y1) return false;
+  if (sh.clipPts && !inPolygon(sh.clipPts, x, y)) return false;
+
+  if (sh.kind === 'circle') return Math.hypot(x - sh.c[0], y - sh.c[1]) <= sh.r;
+  if (sh.kind === 'poly') return inPolygon(sh.pts, x, y);
+
+  for (let i = 1; i < sh.pts.length; i++) {
+    if (distToSegment(x, y, sh.pts[i - 1], sh.pts[i]) <= sh.half) return true;
   }
+  return false;
 }
 
-function distToSegment(px, py, x1, y1, x2, y2) {
+function bbox(pts, pad) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of pts) {
+    if (x < x0) x0 = x; if (x > x1) x1 = x;
+    if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  return [x0 - pad, y0 - pad, x1 + pad, y1 + pad];
+}
+
+/* Crossing number. The outlines are simple closed curves, so this and a
+   winding rule agree everywhere it matters. */
+function inPolygon(pts, x, y) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, yi] = pts[i], [xj, yj] = pts[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function distToSegment(px, py, [x1, y1], [x2, y2]) {
   const dx = x2 - x1, dy = y2 - y1;
   const len2 = dx * dx + dy * dy;
   const t = len2 ? clamp01(((px - x1) * dx + (py - y1) * dy) / len2) : 0;
   return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
 }
 
-const clamp01 = v => Math.min(1, Math.max(0, v));
+const outsideRounded = (x, y, size, r) => {
+  const dx = Math.max(r - x, x - (size - r), 0);
+  const dy = Math.max(r - y, y - (size - r), 0);
+  return dx > 0 && dy > 0 && Math.hypot(dx, dy) > r;
+};
+
+const clamp01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+const rgb = hex => {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+
+/* ── SVG ────────────────────────────────────────────────────────────── */
+
+/* Written from the same shape list, so the favicon is the same drawing
+   the PNGs are, not a hand-kept copy of it. */
+function svg() {
+  const n = v => Math.round(v * 10) / 10;
+  const pts = p => p.map(([x, y]) => `${n(x)},${n(y)}`).join(' ');
+  const body = shapes().map(sh => {
+    if (sh.kind === 'circle') {
+      return `  <circle cx="${n(sh.c[0])}" cy="${n(sh.c[1])}" r="${n(sh.r)}" fill="${sh.fill}"/>`;
+    }
+    if (sh.kind === 'poly') {
+      return `  <polygon points="${pts(sh.pts)}" fill="${sh.fill}"/>`;
+    }
+    const clip = sh.clip ? ` clip-path="url(#${sh.clip})"` : '';
+    return `  <polyline points="${pts(sh.pts)}" fill="none" stroke="${sh.color}"` +
+           ` stroke-width="${sh.width}" stroke-linecap="round" stroke-linejoin="round"${clip}/>`;
+  }).join('\n');
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${UNIT} ${UNIT}" width="${UNIT}" height="${UNIT}">
+  <title>Odyssey</title>
+  <defs>
+    <radialGradient id="paper" cx="50%" cy="42%" r="72%">
+      <stop offset="0%" stop-color="${PALETTE.paperTop}"/>
+      <stop offset="100%" stop-color="${PALETTE.paperEdge}"/>
+    </radialGradient>
+${Object.entries(CLIPS).map(([id, poly]) =>
+  `    <clipPath id="${id}"><polygon points="${pts(poly)}"/></clipPath>`).join('\n')}
+  </defs>
+  <rect width="${UNIT}" height="${UNIT}" rx="112" fill="url(#paper)"/>
+${body}
+</svg>
+`;
+}
 
 /* ── Minimal PNG writer ─────────────────────────────────────────────── */
 
 function png(px, size) {
   // One filter byte (0 = none) per scanline, then raw RGBA.
-  const raw = Buffer.alloc(size * (size * 4 + 1));
+  const stride = size * 4 + 1;
+  const raw = Buffer.alloc(size * stride);
+  const src = Buffer.from(px.buffer, px.byteOffset, px.length);
   for (let y = 0; y < size; y++) {
-    raw[y * (size * 4 + 1)] = 0;
-    Buffer.from(px.buffer, y * size * 4, size * 4)
-      .copy(raw, y * (size * 4 + 1) + 1);
+    raw[y * stride] = 0;
+    src.copy(raw, y * stride + 1, y * size * 4, (y + 1) * size * 4);
   }
 
   const ihdr = Buffer.alloc(13);
@@ -135,7 +191,6 @@ function png(px, size) {
   ihdr.writeUInt32BE(size, 4);
   ihdr[8] = 8;    // bit depth
   ihdr[9] = 6;    // colour type: RGBA
-  ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
 
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
@@ -173,6 +228,9 @@ function crc32(buf) {
 /* ── Emit ───────────────────────────────────────────────────────────── */
 
 mkdirSync(OUT, { recursive: true });
+
+writeFileSync(join(OUT, 'icon.svg'), svg());
+console.log('wrote icons/icon.svg');
 
 // iOS applies its own mask to the home-screen icon, so that one is square.
 const targets = [
